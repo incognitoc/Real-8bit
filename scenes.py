@@ -246,6 +246,20 @@ def ground(cv, style):
                 d.rectangle([x, y, x + w - 1, y + 4], outline=c('#5f5e59'))
                 d.line([x + 1, y + 1, x + w - 2, y + 1], fill=c('#b3b1a8'))
                 x += w
+    elif style == 'linepark':
+        # 中山線形公園：草皮邊加灰色步道磚
+        d.rectangle([0, GY, W, H], fill=c('#b9b4a8'))
+        d.rectangle([0, GY, W, GY + 3], fill=c('#6fb35a'))
+        d.line([0, GY, W, GY], fill=OUT)
+        for x in range(0, W, 3):
+            d.point((x, GY - 1 + (x % 2)), fill=c('#6fb35a'))
+            d.point((x + 1, GY + 3), fill=c('#4f8f43'))
+        d.line([0, GY + 4, W, GY + 4], fill=c('#8e897e'))
+        for row, y in enumerate(range(GY + 5, H, 4)):
+            d.line([0, y + 3, W, y + 3], fill=c('#9e998d'))
+            for x in range(-(row % 2) * 5, W, 10):
+                d.line([x, y, x, y + 3], fill=c('#9e998d'))
+                d.line([x + 1, y, x + 8, y], fill=c('#d0cbc0'))
     elif style == 'boardwalk':
         # 小油坑步道橋：底下是草坡，橋面木板與欄杆
         d.rectangle([0, GY, W, H], fill=c('#4f8f43'))
@@ -442,13 +456,34 @@ def stage_xiaoyoukeng(cv):
     railing(cv)
 
 
+def stage_chifeng(cv):
+    # 赤峰街＋中山線形公園：老公寓、汽車音響行、倉庫，前景是線形公園的大樹
+    sky(cv, ['#6a8fc8', '#86a4d2', '#a8b8d6', '#d4c4bc', '#f0d4ac'])
+    clouds(cv, [(20, 16, 1), (150, 10, 1)])
+    skyline(cv, GY, '#a3a6b4', 71, hmin=14, hmax=40, wmin=8, wmax=14)
+    building(cv, 0, 22, 50, '#d6c8a8', '#a8997a', '#efe6cf', '#4a5563', seed=13, grille=True, tank=True,
+             signs=[(15, 8, 18, '#d8352a')])
+    building(cv, 23, 18, 42, '#c8d0c4', '#97a294', '#e8eee6', '#4a5563', seed=14, grille=True, tank=True,
+             signs=[(2, 6, 14, '#f2c230')])
+    building(cv, 156, 20, 46, '#e2c8b0', '#b0947a', '#f6e4d2', '#4a5563', seed=15, grille=True, tank=True,
+             signs=[(3, 4, 16, '#2fb3a3'), (12, 10, 12, '#d8352a')])
+    building(cv, 177, 16, 38, '#d6d0c4', '#a8a294', '#f0ece4', '#4a5563', seed=16, grille=True, arcade=True)
+    landmark(cv, LM.chifeng, 52)
+    for x in (44, 152):
+        tree(cv, x, 2, ('#3f8f46', '#6cc163', '#25602c'))
+    lamp(cv, 150, lit=True)
+    scooter(cv, 160, '#3f7fd0')
+    scooter(cv, 176, '#e04848')
+    ground(cv, 'linepark')
+
+
 STAGES = [
     ('1-1', '台北 101', 'susan', 'SUSAN', stage_101, 'coin', 30, (88, 128), (40, 104, 2)),
     ('1-2', '仙跡岩登山入口', 'freda', 'FREDA', stage_xianjiyan, 'coin', 54, (176, 150), (8, 116, 2)),
     ('1-3', '圓山飯店', 'jimmy', 'JIMMY', stage_hotel, 'coin', 70, (14, 104), (12, 124, 2)),
     ('1-4', '臺北表演藝術中心', 'davidd', 'DAVIDD', stage_tpac, 'coin', 40, (96, 150), None),
     ('1-5', '臺北流行音樂中心', 'raphael', 'RAPHAEL', stage_music, 'note', 46, (100, 92), None),
-    ('1-6', '小油坑橋', 'anderson', 'ANDERSON', stage_xiaoyoukeng, 'coin', 46, (100, 120), (24, 112, 3)),
+    ('1-6', '赤峰街．中山線形公園', 'anderson', 'ANDERSON', stage_chifeng, 'coin', 30, (100, 120), (24, 112, 3)),
 ]
 
 

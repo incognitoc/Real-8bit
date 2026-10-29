@@ -22,7 +22,8 @@ GROUND_TOP = S.GY - 12    # 地面長條從這一列開始（含小油坑的欄�
 TILES = 5                 # 遠景橫向是原場景的幾倍寬
 EXTRA_TOP = 30            # 遠景上方多畫的天空（基準像素），跳高時鏡頭往上才看得到
 STYLE = {S.stage_101: 'city', S.stage_hotel: 'park', S.stage_tpac: 'city',
-         S.stage_music: 'plaza', S.stage_xianjiyan: 'stone', S.stage_xiaoyoukeng: 'boardwalk'}
+         S.stage_music: 'plaza', S.stage_xianjiyan: 'stone', S.stage_xiaoyoukeng: 'boardwalk',
+         S.stage_chifeng: 'linepark'}
 
 
 BACKDROP = ['sky', 'clouds', 'mountains', 'skyline', 'ground', 'railing']   # 跨整個寬度的遠景
