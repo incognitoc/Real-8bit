@@ -3,7 +3,8 @@
 真的樂團六位團員走過台北六景的 8-bit 橫向捲軸遊戲。這份文件記錄目前做到哪、素材怎麼產生、試過哪些行不通的路，以及接下來可以做什麼。
 
 - GitHub：https://github.com/incognitoc/Real-8bit（`main`）
-- 線上試玩（私人，需由擁有者從 Share 分享）：https://claude.ai/artifact/RdjNiTYXVefMQ5N72ZG4U7
+- **公開試玩（GitHub Pages，給團員）：https://incognitoc.github.io/Real-8bit/**（由 `main` 根目錄部署，推上去約 1 分鐘後更新；開關 Pages 需 incognitoc 帳號）
+- Claude artifact 版（私人）：https://claude.ai/artifact/RdjNiTYXVefMQ5N72ZG4U7
 
 ## 目前狀態
 
