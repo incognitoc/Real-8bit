@@ -1,17 +1,19 @@
-"""幫朝右角色背上各自的樂器（行走姿勢）。
+"""幫朝右角色背上各自的樂器：行走（walk）與跳躍（jump）兩種姿勢。
 
 樂器先直立畫在自己的小圖上（琴頭朝上），旋轉後貼到角色背後；背帶、手上的東西畫在角色前面。
-輸出加了留白的角色圖：原角色左上角位於 (PAD_L, PAD_T)，腳底仍貼齊圖片底邊。
+輸出加了留白的角色圖：原角色左上角位於 (PAD_L, PAD_T)，行走姿勢腳底貼齊圖片底邊。
+跳躍姿勢從同一張側面圖改出來：前腳膝蓋抬高、後腳伸直，一手往前上方舉，背上的樂器因慣性往後甩。
 """
 import math
 import sys
 from pathlib import Path
 
+import numpy as np
 from PIL import Image, ImageDraw
 
 from landmarks import OUT, c, inner_outline
 
-PAD_L, PAD_T, PAD_R = 16, 6, 10
+PAD_L, PAD_T, PAD_R = 16, 6, 12
 
 
 def layer(w, h):
@@ -117,55 +119,121 @@ def o(x, y):
     return x + PAD_L, y + PAD_T
 
 
-def gear_raphael(bg, fg, d):
-    place(bg, *acoustic_guitar(), 32, o(-1, 37))
+def gear_raphael(bg, fg, d, j):
+    place(bg, *acoustic_guitar(), 32 + 8 * j, o(-1, 37))
     strap(d, o(15, 22), o(2, 40))
 
 
-def gear_davidd(bg, fg, d):
-    place(bg, *electric_bass(), 26, o(0, 39))
+def gear_davidd(bg, fg, d, j):
+    place(bg, *electric_bass(), 26 + 8 * j, o(0, 39))
     strap(d, o(16, 22), o(2, 41))
 
 
-def gear_jimmy(bg, fg, d):
-    place(bg, *keytar(), 52, o(3, 31))
+def gear_jimmy(bg, fg, d, j):
+    place(bg, *keytar(), 52 + 8 * j, o(3, 31))
     strap(d, o(15, 22), o(4, 38))
 
 
-def gear_anderson(bg, fg, d):
-    fg.alpha_composite(snare(), o(14, 31))
-    d.line([o(17, 24), o(17, 31)], fill=c('#8a90a4'))               # 背架
-    d.line([o(10, 38), o(22, 28)], fill=c('#e8c890'))               # 鼓棒
-    d.point(o(22, 28), fill=c('#fff2d0'))
+def gear_anderson(bg, fg, d, j):
+    fg.alpha_composite(snare(), o(14, 31 - j))                     # 跳起時小鼓往上彈 1 格
+    d.line([o(17, 24), o(17, 31 - j)], fill=c('#8a90a4'))           # 背架
+    if not j:
+        d.line([o(10, 38), o(22, 28)], fill=c('#e8c890'))           # 鼓棒
+        d.point(o(22, 28), fill=c('#fff2d0'))
 
 
-def gear_susan(bg, fg, d):
-    mic(d, *o(10, 39))
+def gear_susan(bg, fg, d, j):
+    if not j:
+        mic(d, *o(10, 39))
 
 
-def gear_freda(bg, fg, d):
-    mic(d, *o(9, 39))
+def gear_freda(bg, fg, d, j):
+    if not j:
+        mic(d, *o(9, 39))
 
 
 GEAR = {'raphael': gear_raphael, 'davidd': gear_davidd, 'jimmy': gear_jimmy,
         'anderson': gear_anderson, 'susan': gear_susan, 'freda': gear_freda}
 
 
-def equip(sprite, name):
-    w, h = sprite.width + PAD_L + PAD_R, sprite.height + PAD_T
-    out = Image.new('RGBA', (w, h), (0, 0, 0, 0))
-    fg = Image.new('RGBA', (w, h), (0, 0, 0, 0))
+def jump_sprite(sprite, hip=44):
+    a = np.array(sprite)
+    h, w = a.shape[:2]
+    legs = a[hip:].copy()
+    xs = np.nonzero(legs[0, :, 3])[0]
+    mid = (xs.min() + xs.max() + 1) // 2
+    back, front = legs.copy(), legs.copy()
+    back[:, mid:] = 0
+    front[:, :mid] = 0
+    pad = 4                                                        # 往左右各留 4 格給伸出去的腳
+    out = np.zeros((h, w + pad * 2, 4), np.uint8)
+    body = a.copy(); body[hip:] = 0
+    paste(out, back, pad, hip)
+    paste(out, body, pad, 0)
+    paste(out, front, pad + 3, hip - 7)
+    return Image.fromarray(out), pad
+
+
+SKIN = '#f4b860'
+# 跳躍時往上舉的手拿什麼：麥克風、鼓棒，其餘握拳
+RAISED = {'susan': 'mic', 'freda': 'mic', 'anderson': 'stick'}
+
+
+def raised_arm(sprite, name, x0, y0):
+    """前方一隻手往前上方舉（在臉的前面，不蓋住臉）。袖子顏色取自肩膀。"""
+    a = np.array(sprite)
+    sleeve = tuple(int(v) for v in a[y0 + 27, x0 + 14, :3]) + (255,)
+    L = Image.new('RGBA', sprite.size, (0, 0, 0, 0))
+    d = ImageDraw.Draw(L)
+    sx, sy, ex, ey, fx, fy = x0 + 15, y0 + 26, x0 + 20, y0 + 20, x0 + 24, y0 + 12
+    d.line([sx, sy, ex, ey], fill=sleeve, width=5)                 # 上臂（袖子）
+    d.line([ex, ey, fx, fy + 1], fill=c(SKIN), width=4)            # 前臂
+    d.rectangle([fx - 2, fy - 2, fx + 2, fy + 2], fill=c(SKIN))    # 拳頭
+    L = inner_outline(L, OUT)
+    d = ImageDraw.Draw(L)
+    kind = RAISED.get(name)
+    if kind == 'mic':
+        mic(d, fx, fy - 2)
+    elif kind == 'stick':
+        d.line([fx, fy - 2, fx - 3, fy - 10], fill=c('#e8c890'))
+        d.point((fx - 3, fy - 10), fill=c('#fff2d0'))
+    sprite.alpha_composite(L)
+
+
+def paste(dst, src, x, y):
+    h, w = src.shape[:2]
+    H, W = dst.shape[:2]
+    x0, y0, x1, y1 = max(x, 0), max(y, 0), min(x + w, W), min(y + h, H)
+    s = src[y0 - y:y1 - y, x0 - x:x1 - x]
+    m = s[..., 3] > 0
+    dst[y0:y1, x0:x1][m] = s[m]
+
+
+def equip(sprite, name, pose='walk'):
+    j = int(pose == 'jump')
+    shift, top = 0, 12 * j                                         # 跳躍：左右多 shift 格給腳、上方多 top 格給舉高的手
+    if j:
+        sprite, shift = jump_sprite(sprite)
+        sprite = sprite.crop((0, -top, sprite.width, sprite.height))
+        raised_arm(sprite, name, shift, top)
+    w, h = sprite.width - 2 * shift + PAD_L + PAD_R, sprite.height + PAD_T
+    bg = Image.new('RGBA', (w, h - top), (0, 0, 0, 0))
+    fg = Image.new('RGBA', (w, h - top), (0, 0, 0, 0))
     if name in GEAR:
-        GEAR[name](out, fg, ImageDraw.Draw(fg))
-    out.alpha_composite(sprite, (PAD_L, PAD_T))
-    out.alpha_composite(fg)
+        GEAR[name](bg, fg, ImageDraw.Draw(fg), j)
+    out = Image.new('RGBA', (w, h), (0, 0, 0, 0))
+    out.alpha_composite(bg, (0, top))
+    out.alpha_composite(sprite, (PAD_L - shift, PAD_T))
+    out.alpha_composite(fg, (0, top))
     return out
 
 
 def main(chars_dir):
     src = Path(chars_dir)
     for name in ['susan', 'jimmy', 'davidd', 'raphael', 'freda', 'anderson']:
-        equip(Image.open(src / f'{name}.png').convert('RGBA'), name).save(src / f'{name}_walk.png')
+        base = Image.open(src / f'{name}.png').convert('RGBA')
+        for pose in ('walk', 'jump'):
+            equip(base, name, pose).save(src / f'{name}_{pose}.png')
 
 
 if __name__ == '__main__':
