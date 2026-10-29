@@ -10,7 +10,7 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 import landmarks as LM
-from instruments import PAD_L
+import sprites
 from landmarks import OUT, OUT_SOFT, c, inner_outline
 
 W, H = 192, 108
@@ -468,13 +468,16 @@ def render(idx, chars_dir):
         bricks(d, *brk)
 
     # 角色（腳踩地面，朝右）
-    base_w = Image.open(Path(chars_dir) / f'{char}.png').width
-    sp = Image.open(Path(chars_dir) / f'{char}_walk.png')     # 背著樂器的版本（instruments.py）
+    # 手繪角色（sprites.py）與場景同一個像素格，放大 2 倍；腳底中心對齊 cx + 12
+    sp = Image.open(Path(chars_dir) / char / 'right_walk3.png')
+    sp = sp.resize((sp.width * 2, sp.height * 2), Image.NEAREST)
+    fx, fy0 = sprites.FOOT
+    mid = cx + 12
     fy = GY * 2 + (0 if fn is not stage_xiaoyoukeng else -2)
     shadow = Image.new('RGBA', big.size, (0, 0, 0, 0))
-    ImageDraw.Draw(shadow).ellipse([cx + 2, fy - 3, cx + base_w - 2, fy + 2], fill=(20, 24, 50, 90))
+    ImageDraw.Draw(shadow).ellipse([mid - 11, fy - 3, mid + 11, fy + 2], fill=(20, 24, 50, 90))
     big.alpha_composite(shadow)
-    big.alpha_composite(sp, (cx - PAD_L, fy - sp.height))
+    big.alpha_composite(sp, (mid - fx * 2, fy - fy0 * 2))
 
     final = big.resize((W * 2 * SCALE, H * 2 * SCALE), Image.NEAREST)
     hud(final, player, stage, title, coins=idx * 7 + 3, time=300 - idx * 17)

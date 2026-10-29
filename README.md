@@ -17,7 +17,7 @@
 
 - `stages/`：六張 1920×1080 關卡畫面與總覽
 - `landmarks/`：六個地標的透明底像素圖（576×576）與總表
-- `characters/`：從角色設定表擷取的朝右角色（56 px 高）
+- `characters/<名字>/`：手繪 8-bit 角色（帶樂器）：`right_walk1~3`、`right_jump`、`left_*`（鏡像）、`front_play1~2`（正面演奏）；`anchors.json` 記錄腳底中心，`_preview.png` 是總表
 
 ## 重新產生
 
@@ -26,11 +26,9 @@
 ```bash
 pip install pillow numpy
 python landmarks.py landmarks
+python sprites.py characters
 python scenes.py stages characters
 ```
 
-`chars.py` 從角色設定表（原圖不在此 repo）擷取 `characters/`：
-
-```bash
-python chars.py <角色設定表.webp> characters
-```
+角色由 `sprites.py` 逐格手繪（18×32 邏輯像素，與地標同一個像素格，場景中放大 2 倍）：
+樂器 Susan、Freda 麥克風（主唱），Jimmy keytar，Davidd 電 bass，Raphael 木吉他，Anderson 行進小鼓。
