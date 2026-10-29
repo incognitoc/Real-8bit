@@ -42,8 +42,7 @@ canvas { image-rendering: pixelated; image-rendering: crisp-edges; display: bloc
 #hud .pix { font-family: var(--font-pixel); font-size: .8em; letter-spacing: .04em; }
 #hud .title { color: #ffe27a; font-size: 1.05em; }
 #hearts { color: var(--heart); letter-spacing: .1em; font-size: .9em; }
-#coins::before { content: ''; display: inline-block; width: .7em; height: .9em; margin-right: .4em;
-  background: var(--gold); border: 2px solid var(--ink); border-radius: 50%; vertical-align: -.1em; }
+#coins::before { content: '♫'; color: var(--gold); margin-right: .3em; font-family: var(--font-cjk); font-size: 1.3em; }
 
 /* 標題與選關、過關畫面 */
 .overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center;
@@ -121,13 +120,15 @@ canvas { image-rendering: pixelated; image-rendering: crisp-edges; display: bloc
 (() => {
 'use strict';
 const VW = 384, VH = 216, LEVEL = 2400, GROUND_TOP = 168;
+const BG_W = 1920, BG_TOP = 60;          // 遠景 5 倍寬、上方多 60 px 天空
+const BG_RX = (BG_W - VW) / (LEVEL - VW), BG_RY = .5, CAM_UP = 70;   // 視差比例、鏡頭最多往上 70 px
 const STAGES = [
-  { id: '1-1', title: '台北 101',         char: 'susan',    name: 'SUSAN',    inst: 'mic',    gy: 192, pickup: 'coin' },
-  { id: '1-2', title: '圓山飯店',         char: 'jimmy',    name: 'JIMMY',    inst: 'keytar', gy: 192, pickup: 'coin' },
-  { id: '1-3', title: '臺北表演藝術中心', char: 'davidd',   name: 'DAVIDD',   inst: 'bass',   gy: 192, pickup: 'coin' },
-  { id: '1-4', title: '臺北流行音樂中心', char: 'raphael',  name: 'RAPHAEL',  inst: 'guitar', gy: 192, pickup: 'note' },
-  { id: '1-5', title: '仙跡岩登山入口',   char: 'freda',    name: 'FREDA',    inst: 'mic',    gy: 192, pickup: 'coin' },
-  { id: '1-6', title: '小油坑橋',         char: 'anderson', name: 'ANDERSON', inst: 'snare',  gy: 190, pickup: 'coin' },
+  { id: '1-1', title: '台北 101',         char: 'susan',    name: 'SUSAN',    inst: 'mic',    gy: 192 },
+  { id: '1-2', title: '圓山飯店',         char: 'jimmy',    name: 'JIMMY',    inst: 'keytar', gy: 192 },
+  { id: '1-3', title: '臺北表演藝術中心', char: 'davidd',   name: 'DAVIDD',   inst: 'bass',   gy: 192 },
+  { id: '1-4', title: '臺北流行音樂中心', char: 'raphael',  name: 'RAPHAEL',  inst: 'guitar', gy: 192 },
+  { id: '1-5', title: '仙跡岩登山入口',   char: 'freda',    name: 'FREDA',    inst: 'mic',    gy: 192 },
+  { id: '1-6', title: '小油坑橋',         char: 'anderson', name: 'ANDERSON', inst: 'snare',  gy: 190 },
 ];
 const FRAMES = ['right_walk1', 'right_walk2', 'right_walk3', 'right_jump',
                 'left_walk1', 'left_walk2', 'left_walk3', 'left_jump', 'front_play1', 'front_play2'];
@@ -150,7 +151,7 @@ STAGES.forEach((s, i) => {
   jobs.push(load('bg' + i, `assets/bg_${i + 1}.png`), load('gr' + i, `assets/ground_${i + 1}.png`));
   FRAMES.forEach(f => jobs.push(load(`${s.char}/${f}`, `assets/chars/${s.char}/${f}.png`)));
 });
-['brick', 'block', 'block_used', 'coin', 'note', 'enemy_a', 'enemy_b', 'enemy_flat', 'goal']
+['brick', 'block', 'block_used', 'coin', 'note', 'bignote', 'enemy_a', 'enemy_b', 'enemy_flat', 'goal']
   .forEach(k => jobs.push(load(k, `assets/${k}.png`)));
 
 // ------------------------------------------------------------ 版面縮放（整數倍，像素才銳利）
@@ -243,6 +244,12 @@ const Audio = (() => {
     },
     riff(kind) { riff = kind; },
     toggle() { on = !on; if (master) master.gain.value = on ? .9 : 0; return on; },
+    arp(n) {                                                // 頂磚塊：從第 n 級音開始的 do-mi-sol（三度疊三度），每次往上一級
+      if (!ac || !on) return;
+      const SCALE = [0, 2, 4, 5, 7, 9, 11], t = ac.currentTime;
+      const deg = k => { const d = n % 7 + k; return 72 + 12 * Math.floor(d / 7) + SCALE[d % 7]; };
+      [0, 2, 4].forEach((k, i) => tone(t + i * .075, note(deg(k)), i === 2 ? .3 : .12, 'square', .07));
+    },
     sfx(kind) {
       if (!ac || !on) return;
       const t = ac.currentTime;
@@ -263,10 +270,10 @@ function rng(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let
 function makeLevel(si) {
   const st = STAGES[si], r = rng(7 + si * 101), gy = st.gy;
   const solids = [], coins = [], enemies = [];
-  const brick = (x, y) => solids.push({ x, y, w: 16, h: 16, kind: 'brick' });
+  const brick = (x, y) => solids.push({ x, y, w: 16, h: 16, kind: 'brick', used: false, bump: 0 });
   const block = (x, y) => solids.push({ x, y, w: 16, h: 16, kind: 'block', used: false, bump: 0 });
   const coin = (x, y) => coins.push({ x, y, got: false });
-  const arc = (x, y, n = 5) => { for (let k = 0; k < n; k++) coin(x + k * 14, y - Math.round(18 * Math.sin(Math.PI * k / (n - 1)))); };
+  const arc = (x, y, n = 5) => { for (let k = 0; k < n; k++) coin(x + k * 22, y - 10 - Math.round(20 * Math.sin(Math.PI * k / (n - 1)))); };
   const enemy = (x, range) => enemies.push({ x, y: gy - 16, vx: -(0.45 + si * 0.06), x0: x - range, x1: x + range, dead: 0, t: 0 });
   const kinds = ['arc', 'platform', 'enemy', 'stairs', 'high', 'enemy'];
   let x = 340;
@@ -295,7 +302,7 @@ function makeLevel(si) {
 }
 
 // ------------------------------------------------------------ 遊戲狀態
-let S = null, mode = 'title', camX = 0, frame = 0;
+let S = null, mode = 'title', camX = 0, camY = 0, frame = 0;
 const keys = { l: false, r: false, j: false };
 let jumpHeld = false;
 const parts = [];                     // 飛起來的音符、金幣
@@ -303,8 +310,8 @@ const parts = [];                     // 飛起來的音符、金幣
 function startStage(si) {
   const st = STAGES[si];
   S = { si, st, lv: makeLevel(si), x: 60, y: st.gy, vx: 0, vy: 0, face: 'right', ground: true,
-        hearts: 3, coins: 0, time: 300, still: 0, playing: false, inv: 0, dist: 0, clear: 0 };
-  parts.length = 0; camX = 0; mode = 'play';
+        hearts: 3, coins: 0, time: 300, still: 0, playing: false, inv: 0, dist: 0, clear: 0, scale: 0 };
+  parts.length = 0; camX = 0; camY = 0; mode = 'play';
   $('title').hidden = true; $('clear').hidden = true; $('hud').hidden = false; $('mute').hidden = false;
   $('pname').textContent = st.name; $('sid').textContent = 'STAGE ' + st.id; $('stitle').textContent = st.title;
   hud();
@@ -340,7 +347,7 @@ function stageClear() {
   const bonus = Math.floor(S.time / 10);
   const last = S.si === STAGES.length - 1;
   $('clearText').textContent = last ? '巡演完成！' : 'STAGE CLEAR!';
-  $('clearInfo').textContent = `${S.st.name} 收集 ${S.coins} 枚${S.st.pickup === 'note' ? '音符' : '金幣'}　剩餘時間 ${S.time}　加分 ${bonus}`;
+  $('clearInfo').textContent = `${S.st.name} 收集 ${S.coins} 個音符　剩餘時間 ${S.time}　加分 ${bonus}`;
   $('nextBtn').textContent = last ? '回到選單' : '下一站：' + STAGES[S.si + 1].title;
   $('nextBtn').onclick = () => last ? showTitle() : startStage(S.si + 1);
   setTimeout(() => { if (mode === 'clear') { $('clear').hidden = false; $('nextBtn').focus(); } }, 1600);
@@ -386,9 +393,9 @@ function update() {
     if (S.vy > 0) { S.y = s.y; S.vy = 0; S.ground = true; }
     else if (S.vy < 0) {
       S.y = s.y + s.h + PH; S.vy = 1;
-      if (s.kind === 'block' && !s.used) {             // 頂音箱：跳出一枚
-        s.used = true; s.bump = 8; S.coins++; hud(); Audio.sfx('coin');
-        parts.push({ kind: st.pickup, x: s.x + 4, y: s.y - 10, vy: -4, life: 30 });
+      if (!s.used) {                                    // 頂磚塊或音箱：頂出一個音符，音效是 do-mi-sol 琶音，每頂一次往上一個音階
+        s.used = true; s.bump = 8; S.coins++; hud(); Audio.arp(S.scale++);
+        parts.push({ kind: 'bignote', x: s.x - 1, y: s.y - 22, vy: -4.5, life: 34 });
       } else { s.bump = 6; Audio.sfx('bump'); }
     }
     b = box();
@@ -405,7 +412,7 @@ function update() {
     parts.push({ kind: 'note', x: S.x + (Math.random() * 24 - 12), y: S.y - 70, vy: -.6, life: 60, float: true });
 
   // 收集物
-  for (const c of lv.coins) if (!c.got && overlap(b, { x: c.x, y: c.y, w: 8, h: 10 })) {
+  for (const c of lv.coins) if (!c.got && overlap(b, { x: c.x, y: c.y, w: 18, h: 22 })) {
     c.got = true; S.coins++; hud(); Audio.sfx('coin');
   }
   // 敵人
@@ -428,39 +435,40 @@ function update() {
   for (const s of lv.solids) if (s.bump > 0) s.bump--;
 
   camX = Math.max(0, Math.min(LEVEL - VW, S.x - 150));
+  const ty = Math.max(-CAM_UP, Math.min(0, S.y - 120));   // 跳高或站上高台時鏡頭往上
+  camY += (ty - camY) * .12;
 }
 
 // ------------------------------------------------------------ 繪製
 function draw() {
   ctx.clearRect(0, 0, VW, VH);
   const si = S ? S.si : Math.floor(frame / 240) % STAGES.length;
-  const bg = IMG['bg' + si];
-  if (bg) ctx.drawImage(bg, 0, 0);
-  const gr = IMG['gr' + si];
   const cx = S ? Math.round(camX) : (frame * .5) % (LEVEL - VW);
-  if (gr) ctx.drawImage(gr, -cx, GROUND_TOP);
+  const oy = S ? Math.round(-camY) : 0;              // 鏡頭上移時整個世界往下畫
+  const bg = IMG['bg' + si];                          // 遠景：左右、上下都用較慢的視差
+  if (bg) ctx.drawImage(bg, -Math.round(cx * BG_RX), -BG_TOP + Math.round(oy * BG_RY));
+  const gr = IMG['gr' + si];
+  if (gr) ctx.drawImage(gr, -cx, GROUND_TOP + oy);
   if (!S) return;
   const lv = S.lv;
-  const X = x => Math.round(x - cx);
-  // 終點
-  if (IMG.goal) ctx.drawImage(IMG.goal, X(lv.goal.x), lv.goal.y);
+  const X = x => Math.round(x - cx), Y = y => Math.round(y) + oy;
+  if (IMG.goal) ctx.drawImage(IMG.goal, X(lv.goal.x), Y(lv.goal.y));
   for (const s of lv.solids) {
     if (s.x + 16 < cx || s.x > cx + VW) continue;
     const im = s.kind === 'brick' ? IMG.brick : (s.used ? IMG.block_used : IMG.block);
     const dy = s.bump > 0 ? -Math.round(Math.sin(s.bump / 8 * Math.PI) * 4) : 0;
-    ctx.drawImage(im, X(s.x), s.y + dy);
+    ctx.drawImage(im, X(s.x), Y(s.y) + dy);
   }
-  const pk = S.st.pickup === 'note' ? IMG.note : IMG.coin;
   for (const c of lv.coins) if (!c.got) {
     const bob = Math.round(Math.sin((frame + c.x) / 14) * 1.5);
-    ctx.drawImage(pk, X(c.x), c.y + bob);
+    ctx.drawImage(IMG.bignote, X(c.x), Y(c.y) + bob);
   }
   for (const e of lv.enemies) {
     if (e.dead > 30) continue;
     const im = e.dead ? IMG.enemy_flat : (Math.floor(e.t / 12) % 2 ? IMG.enemy_b : IMG.enemy_a);
     ctx.save();
-    if (e.vx > 0 && !e.dead) { ctx.translate(X(e.x) + 18, e.y); ctx.scale(-1, 1); ctx.drawImage(im, 0, 0); }
-    else ctx.drawImage(im, X(e.x), e.y);
+    if (e.vx > 0 && !e.dead) { ctx.translate(X(e.x) + 18, Y(e.y)); ctx.scale(-1, 1); ctx.drawImage(im, 0, 0); }
+    else ctx.drawImage(im, X(e.x), Y(e.y));
     ctx.restore();
   }
   // 角色
@@ -471,14 +479,16 @@ function draw() {
   else f = S.face + '_walk1';
   const im = IMG[`${S.st.char}/${f}`];
   if (im && !(S.inv > 0 && Math.floor(S.inv / 4) % 2)) {
-    ctx.fillStyle = 'rgba(20,24,50,.35)';
-    ctx.beginPath(); ctx.ellipse(X(S.x), S.st.gy, 10, 2.5, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.drawImage(im, X(S.x) - FOOT[0], Math.round(S.y) - FOOT[1]);
+    if (S.ground) {
+      ctx.fillStyle = 'rgba(20,24,50,.35)';
+      ctx.beginPath(); ctx.ellipse(X(S.x), Y(S.y), 10, 2.5, 0, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.drawImage(im, X(S.x) - FOOT[0], Y(S.y) - FOOT[1]);
   }
   for (const p of parts) {
-    const pim = p.kind === 'note' ? IMG.note : IMG.coin;
+    const pim = IMG[p.kind] || IMG.note;
     ctx.globalAlpha = p.float ? Math.min(1, p.life / 20) : 1;
-    ctx.drawImage(pim, X(p.x), Math.round(p.y));
+    ctx.drawImage(pim, X(p.x), Y(p.y));
     ctx.globalAlpha = 1;
   }
 }
