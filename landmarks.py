@@ -451,86 +451,105 @@ def xiaoyoukeng():
     return s.img
 
 
-# ---------------------------------------------------------------- 7. 赤峰街（老公寓一樓汽車音響行＋倉庫）
+# ---------------------------------------------------------------- 7. 赤峰街（洗石子轉角老屋＋汽車材料行）
 def chifeng():
     s = Sprite()
-    tile, tilel, tiled = c('#d9cdb0'), c('#efe6cf'), c('#a8997a')
-    brick, brickl, brickd = c('#a8503a'), c('#c86a50'), c('#6e2e20')
-    iron, ironl = c('#4a4e5a'), c('#8a90a4')
+    rnd = random.Random(7)
+    wash, washl, washd = c('#8e8b7e'), c('#aaa699'), c('#6a675c')         # 洗石子外牆
+    green = c('#4f7a5a')
+    leaf, leafl, leafd = c('#4f9a45'), c('#86cc6a'), c('#2d6a2e')
 
-    # 人行道
+    # 騎樓地坪
     s.part(lambda d: d.rectangle([2, 86, 93, 93], fill=c('#bdb8ad')),
-           lambda d, _: [d.line([x, 87, x, 93], fill=c('#a29d92')) for x in range(6, 96, 8)])
+           lambda d, _: (d.line([2, 87, 93, 87], fill=c('#d6d1c6')), d.line([2, 92, 93, 92], fill=c('#c0504a'))))
 
-    # 左：紅磚倉庫，鐵皮山牆屋頂、大拉門
-    s.part(lambda d: d.polygon([(2, 46), (18, 36), (34, 46)], fill=c('#7a8a9a')),
-           lambda d, _: [d.line([x, 46, 18, 36], fill=c('#5a6878')) for x in range(4, 34, 4)])
+    # ── 左：三層洗石子轉角老屋 ──
+    # 頂樓加蓋（格柵窗）與屋頂植栽
+    s.part(lambda d: d.rectangle([12, 12, 44, 24], fill=c('#d6d3c8')),
+           lambda d, _: [(d.rectangle([x, 14, x + 5, 21], fill=c('#5a5e66')),
+                          d.line([x, 17, x + 5, 17], fill=c('#8a8e96')), d.line([x + 2, 14, x + 2, 21], fill=c('#8a8e96')))
+                         for x in range(14, 42, 7)])
+    for (x, y, r) in [(8, 22, 4), (14, 21, 3), (48, 22, 3)]:
+        s.part(lambda d, x=x, y=y, r=r: d.ellipse([x - r, y - r, x + r, y + r], fill=leaf),
+               lambda d, _, x=x, y=y, r=r: d.ellipse([x - r + 1, y - r + 1, x, y], fill=leafl))
 
-    def wh(d):
-        d.rectangle([3, 46, 33, 86], fill=brick)
+    def house(d):
+        d.rounded_rectangle([2, 24, 60, 86], radius=6, fill=wash)
 
-    def wh_sh(d, _):
-        for y in range(48, 86, 3):
-            d.line([3, y, 33, y], fill=brickd)
-            for x in range(3 + (y // 3 % 2) * 3, 34, 6):
-                d.line([x, y + 1, x, y + 2], fill=brickd)
-        d.rectangle([3, 50, 33, 53], fill=c('#efe6cf'))                       # 白色字帶
-        for x in range(6, 31, 3):
-            d.rectangle([x, 51, x + 1, 52], fill=c('#2a2a34'))
-        d.rectangle([14, 40, 22, 44], fill=c('#ffd98a'))                      # 山牆小窗
-        d.rectangle([7, 58, 29, 86], fill=c('#3f6b52'))                       # 綠色大拉門
-        d.line([7, 58, 29, 86], fill=c('#2c4c3a')); d.line([29, 58, 7, 86], fill=c('#2c4c3a'))
-        d.line([18, 58, 18, 86], fill=c('#2c4c3a'))
-        d.rectangle([4, 47, 5, 85], fill=brickl)
-    s.part(wh, wh_sh)
+    def house_sh(d, _):
+        for _ in range(260):                                                 # 洗石子的顆粒
+            x, y = rnd.randrange(3, 60), rnd.randrange(25, 64)
+            d.point((x, y), fill=washl if rnd.random() < .5 else washd)
+        d.rectangle([2, 24, 60, 30], fill=washl)                             # 屋頂女兒牆（圓角）
+        d.line([2, 30, 60, 30], fill=washd)
+        # 三樓：綠框鐵窗、中間深色門洞
+        for wx in (8, 40):
+            d.rectangle([wx, 34, wx + 12, 46], fill=c('#d8c49a'))
+            d.rectangle([wx, 34, wx + 12, 46], outline=green)
+            for bx in range(wx + 2, wx + 12, 2):
+                d.line([bx, 35, bx, 45], fill=c('#3a3e46'))
+            d.line([wx, 40, wx + 12, 40], fill=c('#3a3e46'))
+        d.rectangle([25, 34, 35, 47], fill=c('#2a2a30'))
+        d.line([22, 42, 23, 47], fill=c('#3a3e46'))                         # 曬衣架與衣服
+        for x, col in [(24, '#2a2a30'), (27, '#e8e6e0'), (30, '#2a2a30')]:
+            d.rectangle([x, 43, x + 2, 48], fill=c(col))
+        # 二樓陽台：女兒牆上一排通風孔
+        d.rectangle([2, 50, 60, 60], fill=washd)
+        d.line([2, 50, 60, 50], fill=washl)
+        for x in range(5, 58, 5):
+            d.rectangle([x, 53, x + 2, 57], fill=c('#2e2c28'))
+        d.line([2, 61, 60, 61], fill=c('#3a3834'))
+        # 一樓：咖啡色遮陽棚、暖黃燈光的小店
+        d.rectangle([10, 63, 60, 67], fill=c('#a8673e'))
+        d.line([10, 67, 60, 67], fill=c('#6e4024'))
+        for x in range(14, 58, 6):
+            d.point((x, 65), fill=c('#f0d9a6'))
+        d.rectangle([12, 68, 58, 86], fill=c('#f6c95a'))
+        d.rectangle([14, 70, 32, 86], fill=c('#ffe39a'))
+        d.rectangle([36, 70, 56, 86], fill=c('#ffd06a'))
+        for x in (17, 22, 27):
+            d.point((x, 72), fill=c('#ffffff'))
+        d.rectangle([3, 66, 9, 86], fill=c('#6f9a8a'))                       # 旁邊的綠色鐵捲門
+        for y in range(67, 86, 2):
+            d.line([3, y, 9, y], fill=c('#557a6c'))
+    s.part(house, house_sh)
 
-    # 右：四層老公寓，頂樓加蓋與水塔
-    s.part(lambda d: d.rectangle([52, 8, 76, 16], fill=c('#7ea6c8')),
-           lambda d, _: [d.line([x, 8, x, 16], fill=c('#5a82a6')) for x in range(53, 76, 2)])
-    s.part(lambda d: d.ellipse([80, 4, 90, 16], fill=c('#d8dce4')),
-           lambda d, _: (d.line([82, 6, 82, 14], fill=c('#ffffff')), d.line([80, 10, 90, 10], fill=c('#9aa0ac'))))
+    # ── 右：深灰浪板＋舊木板拼貼外牆的汽車材料行 ──
+    def shop(d):
+        d.rectangle([62, 18, 84, 86], fill=c('#4a4e56'))
 
-    def apt(d):
-        d.rectangle([36, 16, 92, 86], fill=tile)
+    def shop_sh(d, _):
+        for x in range(63, 84, 2):
+            d.line([x, 18, x, 40], fill=c('#3a3e46'))                         # 浪板
+        planks = ['#7aa69a', '#a8b4a8', '#c8c2a8', '#6e8a96', '#d6d0b8', '#8ab0a0']
+        for k, x in enumerate(range(62, 84, 3)):                              # 舊木板拼貼
+            d.rectangle([x, 40, x + 2, 64], fill=c(planks[k % len(planks)]))
+            d.point((x + 1, 44 + (k * 7) % 16), fill=c('#5a5e56'))
+        d.rectangle([62, 64, 84, 67], fill=c('#3a3e46'))                     # 騎樓遮棚
+        d.rectangle([64, 68, 84, 86], fill=c('#24262c'))                     # 店內零件
+        for (x, y) in [(66, 80), (72, 82), (78, 78)]:
+            d.ellipse([x, y, x + 5, y + 5], fill=c('#1a1a1e'), outline=c('#5a5e66'))
+        d.rectangle([74, 70, 82, 75], fill=c('#c8a06a'))
+        d.rectangle([66, 69, 72, 73], fill=c('#f4ecd6'))                     # 小招牌
+        d.line([67, 71, 71, 71], fill=c('#c8302a'))
+    s.part(shop, shop_sh)
 
-    def apt_sh(d, _):
-        d.rectangle([88, 16, 92, 86], fill=tiled)
-        d.line([37, 16, 37, 86], fill=tilel)
-        for y in range(18, 66, 2):                                           # 磁磚縫
-            d.line([36, y, 88, y], fill=c('#cfc2a3'))
-        for fy in (18, 30, 42, 54):                                          # 每層：鐵窗、冷氣、盆栽
-            d.line([36, fy + 11, 92, fy + 11], fill=tiled)
-            for wx in (40, 64):
-                d.rectangle([wx, fy + 2, wx + 18, fy + 9], fill=c('#36424c'))
-                d.rectangle([wx + 1, fy + 3, wx + 17, fy + 5], fill=c('#6e8aa0'))
-                for bx in range(wx, wx + 19, 3):
-                    d.line([bx, fy + 1, bx, fy + 10], fill=iron)
-                d.line([wx - 1, fy + 1, wx + 19, fy + 1], fill=ironl)
-                d.line([wx - 1, fy + 10, wx + 19, fy + 10], fill=ironl)
-            d.rectangle([84, fy + 4, 89, fy + 8], fill=c('#f4f4f2'))           # 冷氣室外機
-            d.point((86, fy + 6), fill=c('#9aa0ac'))
-            d.rectangle([42, fy + 8, 46, fy + 9], fill=c('#4f9a45'))           # 盆栽
-            d.point((44, fy + 7), fill=c('#86cc6a'))
-        # 一樓：汽車音響行
-        d.rectangle([36, 64, 92, 69], fill=c('#d8352a'))                      # 紅色招牌
-        for x in (42, 56, 70):
-            d.ellipse([x, 64, x + 5, 69], fill=c('#ffd34d'))                  # 喇叭圖示
-            d.point((x + 2, 66), fill=c('#2a2a34'))
-        d.rectangle([76, 65, 88, 68], fill=c('#ffffff'))
-        d.rectangle([38, 70, 90, 86], fill=c('#1e2028'))                      # 店內
-        for y in range(70, 74):
-            d.line([38, y, 90, y], fill=c('#9aa0ac') if y % 2 else c('#6e7480'))   # 捲門拉上一半
-        for (x, y, r) in [(41, 76, 5), (52, 78, 4), (61, 75, 5), (72, 78, 4), (81, 76, 5)]:
-            d.rectangle([x - r, y - r, x + r, y + r + 4], fill=c('#2e3038'))
-            d.ellipse([x - r + 1, y - r + 1, x + r - 1, y + r - 1], fill=c('#5a5e6a'))
-            d.ellipse([x - 1, y - 1, x + 1, y + 1], fill=c('#c8ccd8'))
-        d.rectangle([46, 83, 58, 86], fill=c('#2a2a2a'))                      # 輪胎
-        d.line([47, 84, 57, 84], fill=c('#4a4a4a'))
-    s.part(apt, apt_sh)
+    # 大型直式招牌「汽車材料行」：米黃底、咖啡色字塊
+    def sign(d):
+        d.rectangle([85, 4, 93, 62], fill=c('#ece2b0'))
 
-    # 直式招牌
-    s.part(lambda d: d.rectangle([33, 26, 37, 62], fill=c('#f2c230')),
-           lambda d, _: [d.rectangle([34, y, 36, y + 2], fill=c('#d8352a')) for y in range(28, 61, 5)])
+    def sign_sh(d, _):
+        d.rectangle([92, 4, 93, 62], fill=c('#c8bc8a'))
+        for y in range(7, 60, 9):
+            d.rectangle([87, y, 90, y + 5], fill=c('#a8673e'))
+            d.point((88, y + 2), fill=c('#ece2b0'))
+    s.part(sign, sign_sh)
+    s.part(lambda d: d.rectangle([84, 30, 85, 31], fill=c('#4a4e56')))
+
+    # 路樹
+    s.part(lambda d: d.rectangle([77, 72, 78, 86], fill=c('#7a4a2a')))
+    s.part(lambda d: [d.ellipse([x - r, y - r, x + r, y + r], fill=leaf) for (x, y, r) in [(76, 66, 7), (84, 62, 6), (71, 62, 5)]],
+           lambda d, _: (d.ellipse([71, 60, 77, 65], fill=leafl), d.rectangle([69, 70, 90, 72], fill=leafd)))
     return s.img
 
 

@@ -246,6 +246,20 @@ def ground(cv, style):
                 d.rectangle([x, y, x + w - 1, y + 4], outline=c('#5f5e59'))
                 d.line([x + 1, y + 1, x + w - 2, y + 1], fill=c('#b3b1a8'))
                 x += w
+    elif style == 'alley':
+        # 赤峰街：人行道邊的紅線，柏油路面偶爾有白色箭頭
+        d.rectangle([0, GY, W, H], fill=c('#6a6a6e'))
+        d.rectangle([0, GY, W, GY + 2], fill=c('#c8c4bc'))
+        d.line([0, GY, W, GY], fill=OUT)
+        d.line([0, GY + 3, W, GY + 3], fill=c('#c0504a'))
+        rnd = random.Random(8)
+        for _ in range(W // 2):
+            d.point((rnd.randrange(W), rnd.randrange(GY + 5, H)), fill=c('#58585c' if rnd.random() < .6 else '#7e7e82'))
+        for x in range(30, W, 120):
+            d.rectangle([x, GY + 7, x + 9, GY + 7], fill=c('#e8e8e4'))       # 白色箭頭
+            d.polygon([(x + 9, GY + 5), (x + 13, GY + 7), (x + 9, GY + 9)], fill=c('#e8e8e4'))
+        for x in range(70, W, 160):
+            d.rectangle([x, GY + 9, x + 8, GY + 10], fill=c('#4a4a4e'))      # 人孔蓋
     elif style == 'linepark':
         # 中山線形公園：草皮邊加灰色步道磚
         d.rectangle([0, GY, W, H], fill=c('#b9b4a8'))
@@ -456,25 +470,82 @@ def stage_xiaoyoukeng(cv):
     railing(cv)
 
 
+def wood_shophouse(cv, x, w, h=40, wall='#9a978c', seed=0):
+    """赤峰街的老店屋：二樓灰牆鐵窗加冷氣，綠色浪板雨遮，一樓木格玻璃拉門與紅磚柱。"""
+    top = GY - h
+    rnd = random.Random(seed)
+
+    def shape(d):
+        d.rectangle([x, top, x + w - 1, GY - 1], fill=c(wall))
+
+    def sh(d, _):
+        for _ in range(w * 2):                                               # 舊水泥牆的斑駁
+            d.point((x + rnd.randrange(w), top + rnd.randrange(h - 18)), fill=c('#7e7b70'))
+        d.line([x, top, x + w, top], fill=c('#b8b5aa'))
+        d.rectangle([x + 3, top + 5, x + w - 9, top + 13], fill=c('#3a3e46'))  # 鐵窗
+        for bx in range(x + 4, x + w - 9, 2):
+            d.line([bx, top + 5, bx, top + 13], fill=c('#8a8e96'))
+        d.rectangle([x + w - 7, top + 6, x + w - 3, top + 10], fill=c('#f0f0ee'))  # 冷氣
+        d.point((x + w - 5, top + 8), fill=c('#9aa0ac'))
+        d.rectangle([x, GY - 20, x + w - 1, GY - 18], fill=c('#5f8f6c'))     # 綠色浪板雨遮
+        for xx in range(x, x + w, 2):
+            d.point((xx, GY - 19), fill=c('#3f6b4e'))
+        d.rectangle([x, GY - 17, x + 2, GY - 1], fill=c('#b0503a'))         # 紅磚柱
+        for yy in range(GY - 16, GY, 2):
+            d.point((x + 1, yy), fill=c('#7a3528'))
+        d.rectangle([x + 3, GY - 17, x + w - 1, GY - 1], fill=c('#a8743f'))  # 木作立面
+        for xx in range(x + 3, x + w - 1, 6):                                # 木格玻璃拉門
+            d.rectangle([xx + 1, GY - 16, xx + 4, GY - 9], fill=c('#d6dcd8'))
+            d.line([xx + 1, GY - 13, xx + 4, GY - 13], fill=c('#7a4a22'))
+            d.line([xx + 2, GY - 16, xx + 2, GY - 9], fill=c('#7a4a22'))
+            d.rectangle([xx + 1, GY - 8, xx + 4, GY - 2], fill=c('#c08a4e'))
+            d.line([xx, GY - 17, xx, GY - 1], fill=c('#6e4024'))
+    cv.part(shape, sh)
+
+
+def plant_balcony(cv, x, w, h=50, wall='#e0d6a8', seed=0):
+    """陽台長滿植物的老公寓，一樓是暖黃燈光的咖啡店。"""
+    top = GY - h
+    rnd = random.Random(seed)
+
+    def shape(d):
+        d.rectangle([x, top, x + w - 1, GY - 1], fill=c(wall))
+
+    def sh(d, _):
+        for yy in range(top + 2, GY - 20, 3):                                # 馬賽克磁磚縫
+            d.line([x, yy, x + w, yy], fill=c('#c8be92'))
+        for fy in (top + 6, top + 20):                                       # 兩層陽台：欄杆＋滿出來的植物
+            d.rectangle([x + 1, fy + 6, x + w - 2, fy + 10], fill=c('#c8c2b0'))
+            for bx in range(x + 2, x + w - 2, 2):
+                d.line([bx, fy + 7, bx, fy + 10], fill=c('#8e897e'))
+            d.rectangle([x + 3, fy, x + w - 4, fy + 5], fill=c('#3a3e46'))
+            for _ in range(w // 2):
+                px, py = x + rnd.randrange(w), fy + rnd.randrange(-2, 7)
+                d.rectangle([px, py, px + 1, py + 1], fill=c('#4f9a45' if rnd.random() < .6 else '#86cc6a'))
+        d.rectangle([x, GY - 18, x + w - 1, GY - 1], fill=c('#3a3430'))     # 一樓咖啡店
+        d.rectangle([x + 2, GY - 15, x + w - 3, GY - 1], fill=c('#f2c46a'))
+        for xx in range(x + 3, x + w - 3, 4):
+            d.line([xx, GY - 15, xx, GY - 1], fill=c('#a87a3a'))
+        for xx in range(x + 4, x + w - 3, 6):                                # 吊燈
+            d.point((xx, GY - 17), fill=c('#ffe39a'))
+        d.rectangle([x + w - 6, GY - 8, x + w - 3, GY - 3], fill=c('#2a2a2a'))   # 菜單黑板
+    cv.part(shape, sh)
+
+
 def stage_chifeng(cv):
-    # 赤峰街＋中山線形公園：老公寓、汽車音響行、倉庫，前景是線形公園的大樹
-    sky(cv, ['#6a8fc8', '#86a4d2', '#a8b8d6', '#d4c4bc', '#f0d4ac'])
-    clouds(cv, [(20, 16, 1), (150, 10, 1)])
-    skyline(cv, GY, '#a3a6b4', 71, hmin=14, hmax=40, wmin=8, wmax=14)
-    building(cv, 0, 22, 50, '#d6c8a8', '#a8997a', '#efe6cf', '#4a5563', seed=13, grille=True, tank=True,
-             signs=[(15, 8, 18, '#d8352a')])
-    building(cv, 23, 18, 42, '#c8d0c4', '#97a294', '#e8eee6', '#4a5563', seed=14, grille=True, tank=True,
-             signs=[(2, 6, 14, '#f2c230')])
-    building(cv, 156, 20, 46, '#e2c8b0', '#b0947a', '#f6e4d2', '#4a5563', seed=15, grille=True, tank=True,
-             signs=[(3, 4, 16, '#2fb3a3'), (12, 10, 12, '#d8352a')])
-    building(cv, 177, 16, 38, '#d6d0c4', '#a8a294', '#f0ece4', '#4a5563', seed=16, grille=True, arcade=True)
+    # 赤峰街：灰撲撲的老店屋、木格拉門的汽機車零件行、陽台長滿植物的老公寓，陰天的淡色天空
+    sky(cv, ['#c2ccd4', '#cfd7dc', '#dce1e3', '#e6e9e8', '#eeefea'])
+    skyline(cv, GY, '#b6b4ac', 71, hmin=16, hmax=46, wmin=8, wmax=14)
+    plant_balcony(cv, 0, 26, 50, seed=1)
+    wood_shophouse(cv, 27, 24, 38, seed=2)
     landmark(cv, LM.chifeng, 52)
-    for x in (44, 152):
-        tree(cv, x, 2, ('#3f8f46', '#6cc163', '#25602c'))
-    lamp(cv, 150, lit=True)
-    scooter(cv, 160, '#3f7fd0')
-    scooter(cv, 176, '#e04848')
-    ground(cv, 'linepark')
+    wood_shophouse(cv, 149, 22, 36, wall='#8e8b80', seed=3)
+    plant_balcony(cv, 172, 20, 46, wall='#d8cfb8', seed=4)
+    scooter(cv, 30, '#9ab8e0')
+    scooter(cv, 152, '#e04848')
+    tree(cv, 4, 2, ('#3f8f46', '#6cc163', '#25602c'))   # 中山線形公園的路樹
+    lamp(cv, 168)
+    ground(cv, 'alley')
 
 
 STAGES = [
