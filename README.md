@@ -13,6 +13,16 @@
 | 1-5 | 仙跡岩登山入口 | Freda |
 | 1-6 | 小油坑橋 | Anderson |
 
+## 網頁遊戲
+
+`game/` 是可以玩的橫向捲軸遊戲（六關、每關一位團員）：← → 移動、空白鍵／↑ 跳躍，
+停下來就會轉正面演奏自己的樂器（WebAudio 晶片音），踩走音怪、頂音箱拿金幣，碰到終點旗桿過關。手機有觸控鍵。
+
+```bash
+python build_game.py          # 由 scenes.py／sprites.py 產生 game/assets/
+cd game && python3 -m http.server 8765   # 開 http://localhost:8765/
+```
+
 ## 目錄
 
 - `stages/`：六張 1920×1080 關卡畫面與總覽
