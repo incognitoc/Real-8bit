@@ -10,6 +10,7 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 import landmarks as LM
+from instruments import PAD_L
 from landmarks import OUT, OUT_SOFT, c, inner_outline
 
 W, H = 192, 108
@@ -467,12 +468,13 @@ def render(idx, chars_dir):
         bricks(d, *brk)
 
     # 角色（腳踩地面，朝右）
-    sp = Image.open(Path(chars_dir) / f'{char}.png')
+    base_w = Image.open(Path(chars_dir) / f'{char}.png').width
+    sp = Image.open(Path(chars_dir) / f'{char}_walk.png')     # 背著樂器的版本（instruments.py）
     fy = GY * 2 + (0 if fn is not stage_xiaoyoukeng else -2)
     shadow = Image.new('RGBA', big.size, (0, 0, 0, 0))
-    ImageDraw.Draw(shadow).ellipse([cx + 2, fy - 3, cx + sp.width - 2, fy + 2], fill=(20, 24, 50, 90))
+    ImageDraw.Draw(shadow).ellipse([cx + 2, fy - 3, cx + base_w - 2, fy + 2], fill=(20, 24, 50, 90))
     big.alpha_composite(shadow)
-    big.alpha_composite(sp, (cx, fy - sp.height))
+    big.alpha_composite(sp, (cx - PAD_L, fy - sp.height))
 
     final = big.resize((W * 2 * SCALE, H * 2 * SCALE), Image.NEAREST)
     hud(final, player, stage, title, coins=idx * 7 + 3, time=300 - idx * 17)
