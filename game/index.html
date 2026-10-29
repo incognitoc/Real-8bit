@@ -102,7 +102,7 @@ canvas { image-rendering: pixelated; image-rendering: crisp-edges; display: bloc
     <h1>真的樂團</h1>
     <div class="sub">REAL REAL · 台北六景巡演</div>
     <div id="picks"></div>
-    <div class="hint">← → 移動　空白鍵／↑ 跳躍　停下來就會開始演奏　M 靜音</div>
+    <div class="hint">← → 移動　空白鍵／↑ 跳躍　小心地上的洞　停下來就會開始演奏　M 靜音</div>
   </div>
   <div class="overlay" id="clear" hidden>
     <div class="big" id="clearText">STAGE CLEAR!</div>
@@ -124,10 +124,10 @@ const BG_W = 1920, BG_TOP = 60;          // 遠景 5 倍寬、上方多 60 px �
 const BG_RX = (BG_W - VW) / (LEVEL - VW), BG_RY = .5, CAM_UP = 70;   // 視差比例、鏡頭最多往上 70 px
 const STAGES = [
   { id: '1-1', title: '台北 101',         char: 'susan',    name: 'SUSAN',    inst: 'mic',    gy: 192 },
-  { id: '1-2', title: '圓山飯店',         char: 'jimmy',    name: 'JIMMY',    inst: 'keytar', gy: 192 },
-  { id: '1-3', title: '臺北表演藝術中心', char: 'davidd',   name: 'DAVIDD',   inst: 'bass',   gy: 192 },
-  { id: '1-4', title: '臺北流行音樂中心', char: 'raphael',  name: 'RAPHAEL',  inst: 'guitar', gy: 192 },
-  { id: '1-5', title: '仙跡岩登山入口',   char: 'freda',    name: 'FREDA',    inst: 'mic',    gy: 192 },
+  { id: '1-2', title: '仙跡岩登山入口',   char: 'freda',    name: 'FREDA',    inst: 'mic',    gy: 192 },
+  { id: '1-3', title: '圓山飯店',         char: 'jimmy',    name: 'JIMMY',    inst: 'keytar', gy: 192 },
+  { id: '1-4', title: '臺北表演藝術中心', char: 'davidd',   name: 'DAVIDD',   inst: 'bass',   gy: 192 },
+  { id: '1-5', title: '臺北流行音樂中心', char: 'raphael',  name: 'RAPHAEL',  inst: 'guitar', gy: 192 },
   { id: '1-6', title: '小油坑橋',         char: 'anderson', name: 'ANDERSON', inst: 'snare',  gy: 190 },
 ];
 const FRAMES = ['right_walk1', 'right_walk2', 'right_walk3', 'right_jump',
@@ -269,16 +269,16 @@ function rng(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let
 
 function makeLevel(si) {
   const st = STAGES[si], r = rng(7 + si * 101), gy = st.gy;
-  const solids = [], coins = [], enemies = [];
+  const solids = [], coins = [], enemies = [], pits = [];
   const brick = (x, y) => solids.push({ x, y, w: 16, h: 16, kind: 'brick', used: false, bump: 0 });
   const block = (x, y) => solids.push({ x, y, w: 16, h: 16, kind: 'block', used: false, bump: 0 });
   const coin = (x, y) => coins.push({ x, y, got: false });
   const arc = (x, y, n = 5) => { for (let k = 0; k < n; k++) coin(x + k * 22, y - 10 - Math.round(20 * Math.sin(Math.PI * k / (n - 1)))); };
   const enemy = (x, range) => enemies.push({ x, y: gy - 16, vx: -(0.45 + si * 0.06), x0: x - range, x1: x + range, dead: 0, t: 0 });
-  const kinds = ['arc', 'platform', 'enemy', 'stairs', 'high', 'enemy'];
+  const kinds = ['arc', 'platform', 'enemy', 'stairs', 'high', 'pit', 'pit', 'enemy'];
   let x = 340;
   while (x < LEVEL - 380) {
-    const k = kinds[Math.floor(r() * (si < 2 ? 5 : kinds.length))];
+    const k = kinds[Math.floor(r() * (si < 2 ? 7 : kinds.length))];
     if (k === 'arc') { arc(x, gy - 40); x += 170; }
     else if (k === 'platform') {
       const n = 4 + Math.floor(r() * 2);
@@ -291,6 +291,11 @@ function makeLevel(si) {
       coin(x + 36, gy - 66); coin(x + 52, gy - 74);
       if (si >= 3) enemy(x + 130, 30);
       x += 200;
+    } else if (k === 'pit') {                          // 地上的洞：掉下去扣一顆心，從洞前重來
+      const w = Math.round(36 + si * 4 + r() * 12);
+      pits.push({ x, w });
+      arc(x + w / 2 - 44, gy - 62);   // 一排音符置中在洞的上方
+      x += w + 150;
     } else if (k === 'high') {
       for (let i = 0; i < 3; i++) brick(x + i * 16, gy - 88);
       for (let i = 0; i < 3; i++) (i === 2 ? block : brick)(x + 76 + i * 16, gy - 136);
@@ -298,7 +303,10 @@ function makeLevel(si) {
       x += 230;
     }
   }
-  return { solids, coins, enemies, goal: { x: LEVEL - 170, y: gy - 96, w: 24, h: 96 } };
+  for (const e of enemies) for (const p of pits) {      // 走音怪不走進洞裡
+    if (e.x < p.x) e.x1 = Math.min(e.x1, p.x - 20); else e.x0 = Math.max(e.x0, p.x + p.w + 2);
+  }
+  return { solids, coins, enemies, pits, goal: { x: LEVEL - 170, y: gy - 96, w: 24, h: 96 } };
 }
 
 // ------------------------------------------------------------ 遊戲狀態
@@ -310,7 +318,7 @@ const parts = [];                     // 飛起來的音符、金幣
 function startStage(si) {
   const st = STAGES[si];
   S = { si, st, lv: makeLevel(si), x: 60, y: st.gy, vx: 0, vy: 0, face: 'right', ground: true,
-        hearts: 3, coins: 0, time: 300, still: 0, playing: false, inv: 0, dist: 0, clear: 0, scale: 0 };
+        hearts: 3, coins: 0, time: 300, still: 0, playing: false, inv: 0, dist: 0, clear: 0, scale: 0, pit: null };
   parts.length = 0; camX = 0; camY = 0; mode = 'play';
   $('title').hidden = true; $('clear').hidden = true; $('hud').hidden = false; $('mute').hidden = false;
   $('pname').textContent = st.name; $('sid').textContent = 'STAGE ' + st.id; $('stitle').textContent = st.title;
@@ -331,6 +339,14 @@ function hurt() {
   if (S.inv > 0) return;
   S.hearts--; S.inv = 90; Audio.sfx('hurt'); S.vy = -5; hud();
   if (S.hearts <= 0) gameOver('沒力氣了…');
+}
+
+function fall() {                                      // 掉進洞：扣一顆心，從洞前的地面重來
+  const p = S.pit;
+  S.hearts--; Audio.sfx('hurt'); hud();
+  if (S.hearts <= 0) { gameOver('掉進洞裡了…'); return; }
+  Object.assign(S, { x: p.x - 70, y: S.st.gy, vx: 0, vy: 0, pit: null, ground: true, inv: 90 });
+  camY = 0;
 }
 
 function gameOver(msg) {
@@ -381,6 +397,7 @@ function update() {
   // 水平移動與碰撞
   S.x += S.vx;
   S.x = Math.max(PW / 2, Math.min(LEVEL - PW / 2, S.x));
+  if (S.pit) S.x = Math.max(S.pit.x + PW / 2, Math.min(S.pit.x + S.pit.w - PW / 2, S.x));   // 掉進洞裡就出不來
   let b = box();
   for (const s of lv.solids) if (overlap(b, s)) {
     if (S.vx > 0) S.x = s.x - PW / 2; else if (S.vx < 0) S.x = s.x + s.w + PW / 2;
@@ -388,7 +405,12 @@ function update() {
   }
   // 垂直移動與碰撞
   S.y += S.vy; S.ground = false; b = box();
-  if (S.y >= st.gy) { S.y = st.gy; S.vy = 0; S.ground = true; b = box(); }
+  const hole = lv.pits.find(p => S.x > p.x + 4 && S.x < p.x + p.w - 4);
+  if (S.y >= st.gy && !S.pit) {
+    if (hole) S.pit = hole;
+    else { S.y = st.gy; S.vy = 0; S.ground = true; b = box(); }
+  }
+  if (S.pit && S.y > VH + 90) { fall(); return; }
   for (const s of lv.solids) if (overlap(b, s)) {
     if (S.vy > 0) { S.y = s.y; S.vy = 0; S.ground = true; }
     else if (S.vy < 0) {
@@ -448,10 +470,23 @@ function draw() {
   const bg = IMG['bg' + si];                          // 遠景：左右、上下都用較慢的視差
   if (bg) ctx.drawImage(bg, -Math.round(cx * BG_RX), -BG_TOP + Math.round(oy * BG_RY));
   const gr = IMG['gr' + si];
-  if (gr) ctx.drawImage(gr, -cx, GROUND_TOP + oy);
-  if (!S) return;
+  if (!S) { if (gr) ctx.drawImage(gr, -cx, GROUND_TOP); return; }
   const lv = S.lv;
   const X = x => Math.round(x - cx), Y = y => Math.round(y) + oy;
+  // 地面分段畫，洞的位置留空、塗成深色
+  if (gr) {
+    let a = 0;
+    for (const p of [...lv.pits, { x: LEVEL, w: 0 }]) {
+      const w = p.x - a;
+      if (w > 0 && a < cx + VW && p.x > cx) ctx.drawImage(gr, a, 0, w, gr.height, X(a), GROUND_TOP + oy, w, gr.height);
+      a = p.x + p.w;
+    }
+  }
+  for (const p of lv.pits) {
+    if (p.x + p.w < cx || p.x > cx + VW) continue;
+    ctx.fillStyle = '#0a0c20'; ctx.fillRect(X(p.x), Y(S.st.gy), p.w, VH);
+    ctx.fillStyle = '#1c2242'; ctx.fillRect(X(p.x), Y(S.st.gy), 2, VH); ctx.fillRect(X(p.x + p.w) - 2, Y(S.st.gy), 2, VH);
+  }
   if (IMG.goal) ctx.drawImage(IMG.goal, X(lv.goal.x), Y(lv.goal.y));
   for (const s of lv.solids) {
     if (s.x + 16 < cx || s.x > cx + VW) continue;

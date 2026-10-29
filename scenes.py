@@ -444,10 +444,10 @@ def stage_xiaoyoukeng(cv):
 
 STAGES = [
     ('1-1', '台北 101', 'susan', 'SUSAN', stage_101, 'coin', 30, (88, 128), (40, 104, 2)),
-    ('1-2', '圓山飯店', 'jimmy', 'JIMMY', stage_hotel, 'coin', 70, (14, 104), (12, 124, 2)),
-    ('1-3', '臺北表演藝術中心', 'davidd', 'DAVIDD', stage_tpac, 'coin', 40, (96, 150), None),
-    ('1-4', '臺北流行音樂中心', 'raphael', 'RAPHAEL', stage_music, 'note', 46, (100, 92), None),
-    ('1-5', '仙跡岩登山入口', 'freda', 'FREDA', stage_xianjiyan, 'coin', 54, (176, 150), (8, 116, 2)),
+    ('1-2', '仙跡岩登山入口', 'freda', 'FREDA', stage_xianjiyan, 'coin', 54, (176, 150), (8, 116, 2)),
+    ('1-3', '圓山飯店', 'jimmy', 'JIMMY', stage_hotel, 'coin', 70, (14, 104), (12, 124, 2)),
+    ('1-4', '臺北表演藝術中心', 'davidd', 'DAVIDD', stage_tpac, 'coin', 40, (96, 150), None),
+    ('1-5', '臺北流行音樂中心', 'raphael', 'RAPHAEL', stage_music, 'note', 46, (100, 92), None),
     ('1-6', '小油坑橋', 'anderson', 'ANDERSON', stage_xiaoyoukeng, 'coin', 46, (100, 120), (24, 112, 3)),
 ]
 
