@@ -66,6 +66,21 @@ canvas { image-rendering: pixelated; image-rendering: crisp-edges; display: bloc
 .btn:focus-visible, .btn:hover { outline: 3px solid var(--gold); }
 .big { font-family: var(--font-pixel); font-size: 1.4em; color: var(--gold); text-shadow: 3px 3px 0 var(--ink); }
 
+/* 開場主視覺：點一下（或 Enter／空白鍵）進入選關 */
+#splash { position: absolute; inset: 0; overflow: hidden; background: var(--night); line-height: 1.2; }
+#splash img { width: 100%; height: 100%; max-width: 100%; object-fit: cover; display: block; }
+#splash .start { all: unset; cursor: pointer; position: absolute; left: 50%; bottom: 5%; transform: translateX(-50%);
+  display: flex; align-items: center; gap: .6em; white-space: nowrap;
+  padding: .55em 1.1em; font-size: var(--hud); font-family: var(--font-cjk); color: #fff;
+  background: var(--heart); border: 3px solid var(--ink); box-shadow: inset 0 -4px 0 #b8304e, 4px 4px 0 var(--ink); }
+#splash .start .pix { font-family: var(--font-pixel); font-size: .6em; color: #ffe27a; letter-spacing: .08em; }
+#splash .start:hover, #splash .start:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
+#splash .blink { animation: blink 1s steps(2, start) infinite; }
+@keyframes blink { to { visibility: hidden; } }
+@media (prefers-reduced-motion: reduce) { #splash .blink { animation: none; } }
+/* 選關畫面墊一層暗化的主視覺 */
+#title { background: linear-gradient(rgba(12, 14, 40, .8), rgba(12, 14, 40, .86)), url(assets/keyart.jpg) center / cover; }
+
 /* 觸控鍵：只在觸控裝置顯示 */
 #pad { display: none; width: 100%; max-width: 640px; justify-content: space-between; margin-top: 14px; gap: 12px; }
 #pad .grp { display: flex; gap: 12px; }
@@ -98,7 +113,11 @@ canvas { image-rendering: pixelated; image-rendering: crisp-edges; display: bloc
     <div class="c"><span class="pix" id="sid">STAGE 1-1</span><span class="title" id="stitle">台北 101</span></div>
     <div class="r"><span class="pix" id="coins">×00</span><span class="pix" id="time">TIME 300</span></div>
   </div>
-  <div class="overlay" id="title">
+  <div id="splash">
+    <img src="assets/keyart.jpg" alt="真的樂團 REAL REAL：六位團員在排練室，Davidd 彈 bass、Anderson 打鼓、Freda 與 Susan 主唱、Raphael 拿吉他、Jimmy 抱著 keytar">
+    <button class="start" id="startBtn" type="button"><span class="blink">▶</span> 開始巡演 <span class="pix">PRESS START</span></button>
+  </div>
+  <div class="overlay" id="title" hidden>
     <h1>真的樂團</h1>
     <div class="sub">REAL REAL · 台北六景巡演</div>
     <div id="picks"></div>
@@ -537,6 +556,7 @@ addEventListener('keydown', e => {
   const k = KEYMAP[e.code];
   if (k && mode === 'play') { keys[k] = true; e.preventDefault(); }
   if ((e.code === 'Enter' || e.code === 'Space') && !$('clear').hidden) { e.preventDefault(); $('nextBtn').click(); }
+  else if ((e.code === 'Enter' || e.code === 'Space') && !$('splash').hidden) { e.preventDefault(); $('startBtn').click(); }
 });
 addEventListener('keyup', e => { const k = KEYMAP[e.code]; if (k) keys[k] = false; });
 addEventListener('blur', () => { keys.l = keys.r = keys.j = false; });
@@ -559,9 +579,13 @@ STAGES.forEach((s, i) => {
   picks.appendChild(b);
 });
 
+$('startBtn').addEventListener('click', () => {               // 開場主視覺 → 選關
+  Audio.start(); $('splash').hidden = true; $('title').hidden = false; $('pick0').focus();
+});
+
 const boot = () => Promise.all(jobs).then(() => requestAnimationFrame(loop));
 window.claude?.hot?.snapshot?.(() => ({ stage: S ? S.si : null }));
-const start = data => { boot(); if (data && data.stage != null) startStage(data.stage); };
+const start = data => { boot(); if (data && data.stage != null) { $('splash').hidden = true; startStage(data.stage); } };
 window.claude?.hot?.ready ? window.claude.hot.ready(start) : start(window.claude?.hot?.data ?? {});
 })();
 </script>
