@@ -1,56 +1,39 @@
-"""六位團員的手繪 8-bit 角色（程式逐格畫），含樂器。
+"""六位團員的 8-bit 角色（帶樂器）。
 
-每個角色 18x32 邏輯像素（不含外框），和地標、場景同一個像素格；放進場景時放大 2 倍。
-畫法：各部位用文字像素圖描述（一個字元一格，字元代表「角色」，各人有自己的色盤），
-每個部位各自加 1 格深藍外框後依序疊起來，所以頭、身體、手臂、樂器之間都有清楚的分界。
+頭部取自樂團海報（extract_heads.py → heads/<名字>.png），身體、手腳與樂器依海報的服裝配色用程式畫：
+軀幹是多邊形，手腳是粗線段（肩→肘→手、髖→膝→踝），所以走路、跳躍、演奏都只是換關節角度。
+每個部位各自加 1 格深藍外框後依序疊起來，頭、身體、手臂、樂器之間都有清楚的分界。
 
+角色約 30x58 像素，放進場景時 1:1 貼在 2 倍場景層上（和地標相比是一半大小的像素格）。
 輸出到 characters/<名字>/：
   right_walk1~3、right_jump、left_walk1~3、left_jump、front_play1~2
-所有畫格同尺寸（CW x CH），腳底中心在 ANCHOR 記錄的位置。
+所有畫格同尺寸（CW x CH），腳底中心記在 characters/anchors.json。
 """
 import json
 import math
-import re
 import sys
 from pathlib import Path
 
 import numpy as np
 from PIL import Image, ImageDraw
 
-from landmarks import OUT, c
+from landmarks import OUT, c, inner_outline
 
-CW, CH = 34, 42          # 畫格尺寸
-OX, OY = 8, 8            # 角色 18x32 區塊的左上角
-FOOT = (OX + 9, OY + 32)  # 腳底中心（朝右、正面皆同；朝左鏡像）
+HERE = Path(__file__).parent
+CW, CH = 66, 88          # 畫格尺寸
+OX, OY = 18, 20          # 角色 30x58 區塊的左上角
+FOOT = (OX + 15, OY + 58)  # 腳底中心
 
-SKIN, SKIN_D = '#f4b878', '#d98e58'
+SKIN = '#f4b070'
+NECK_Y = 26              # 頭部底緣（下巴）對齊的高度
+HIP_Y = 43
+THIGH, SHIN = 7, 7
+WHITE = '#ffffff'
 
 
 # ------------------------------------------------------------ 基本工具
-def grid(txt):
-    rows = txt.strip('\n').split('\n')
-    return [re.sub('^r[0-9]+ ?', '', r).rstrip() for r in rows]       # 每列前面的 r12 是列號，方便對位
-
-
-def paint(img, rows, pal, x0=OX, y0=OY, pattern=None):
-    """把文字像素圖畫進 img。'.' 不畫、'_' 擦掉；pattern(role, x, y) 可回傳替換色（格紋用）。"""
-    a = np.array(img)
-    for y, row in enumerate(rows):
-        for x, ch in enumerate(row):
-            if ch == '.':
-                continue
-            X, Y = x0 + x, y0 + y
-            if not (0 <= X < img.width and 0 <= Y < img.height):
-                continue
-            if ch == '_':
-                a[Y, X] = 0
-                continue
-            col = pattern(ch, x, y) if pattern else None
-            col = col or pal.get(ch)
-            if col is None:
-                raise KeyError(f'色盤缺少 {ch!r}')
-            a[Y, X] = c(col) if isinstance(col, str) else col
-    return Image.fromarray(a)
+def blank():
+    return Image.new('RGBA', (CW, CH), (0, 0, 0, 0))
 
 
 def outline(img, col=OUT):
@@ -63,12 +46,9 @@ def outline(img, col=OUT):
     return Image.fromarray(a)
 
 
-def blank():
-    return Image.new('RGBA', (CW, CH), (0, 0, 0, 0))
-
-
-def part(rows, pal, pattern=None, x0=OX, y0=OY):
-    return outline(paint(blank(), rows, pal, x0, y0, pattern))
+def P(x, y):
+    """角色區塊座標 → 畫格座標。"""
+    return (OX + x, OY + y)
 
 
 def stack(*layers):
@@ -79,704 +59,256 @@ def stack(*layers):
     return out
 
 
-def line_part(segs, x0=OX, y0=OY):
-    """手臂之類的粗線段：segs = [(點列, 顏色, 粗細), ...]，畫完一起加外框。"""
-    L = blank()
-    d = ImageDraw.Draw(L)
-    for pts, col, w in segs:
-        pts = [(x0 + x, y0 + y) for x, y in pts]
-        if len(pts) == 1 or w <= 1:
-            d.line(pts if len(pts) > 1 else pts * 2, fill=c(col), width=1)
-        else:
-            d.line(pts, fill=c(col), width=w)
-        for x, y in pts:                                   # 關節補圓，避免粗線轉角缺角
-            r = (w - 1) / 2
-            d.rectangle([x - math.floor(r), y - math.floor(r), x + math.ceil(r), y + math.ceil(r)], fill=c(col))
-    return outline(L)
-
-
-def dots(img, pts, col, x0=OX, y0=OY):
-    d = ImageDraw.Draw(img)
+def limb(d, pts, col, w):
+    """粗線段：每段畫成粗線，關節補方塊，避免轉角缺角。"""
+    pts = [P(*p) for p in pts]
+    for a, b in zip(pts, pts[1:]):
+        d.line([a, b], fill=c(col), width=w)
+    r0, r1 = (w - 1) // 2, w // 2
     for x, y in pts:
-        d.point((x0 + x, y0 + y), fill=c(col) if isinstance(col, str) else col)
-    return img
+        d.rectangle([round(x) - r0, round(y) - r0, round(x) + r1, round(y) + r1], fill=c(col))
 
 
-# ------------------------------------------------------------ 共用版型（18x32 格，r 後面是列號）
-HEAD_SIDE = grid('''
-r0 ..................
-r1 ......SSSSSS......
-r2 ....SSSSSSSSSS....
-r3 ...SSSSSSSSSSSS...
-r4 ..SSSSSSSSSSSSSS..
-r5 ..SSSSSSSSSSSSSS..
-r6 ..SSSSSSSSSSSSSS..
-r7 ..SSSSSSSSSSSSSSS.
-r8 ..SSSSSSSSSSSSSSS.
-r9 ..SSSSSSSSSSSSSS..
-r10 ..SSSSSSSSSSSSSS..
-r11 ...SSSSSSSSSSSSS..
-r12 ....SSSSSSSSSSSS..
-r13 ......ssSSSSSs....
-''')
-FACE_SIDE = grid('''
-r0 ..................
-r1 ..................
-r2 ..................
-r3 ..................
-r4 ..................
-r5 ..................
-r6 ..................
-r7 ..................
-r8 .......ss....E....
-r9 .......ss....E....
-r10 ............r.....
-r11 ..............MM..
-''')
-HEAD_FRONT = grid('''
-r0 ..................
-r1 .....SSSSSSSS.....
-r2 ....SSSSSSSSSS....
-r3 ...SSSSSSSSSSSS...
-r4 ..SSSSSSSSSSSSSS..
-r5 ..SSSSSSSSSSSSSS..
-r6 ..SSSSSSSSSSSSSS..
-r7 ..SSSSSSSSSSSSSS..
-r8 .sSSSSSSSSSSSSSSs.
-r9 .sSSSSSSSSSSSSSSs.
-r10 ..SSSSSSSSSSSSSS..
-r11 ..SSSSSSSSSSSSSS..
-r12 ...SSSSSSSSSSSS...
-r13 .....sSSSSSSs.....
-''')
-FACE_FRONT = grid('''
-r0 ..................
-r1 ..................
-r2 ..................
-r3 ..................
-r4 ..................
-r5 ..................
-r6 ..................
-r7 ..................
-r8 ......E....E......
-r9 ......E....E......
-r10 ....r........r....
-r11 .......MWWM.......
-r12 ........MM........
-''')
-GLASSES_SIDE = grid('''
-r0 ..................
-r1 ..................
-r2 ..................
-r3 ..................
-r4 ..................
-r5 ..................
-r6 ..................
-r7 ............GGGG..
-r8 ........GGGGG..G..
-r9 ............G..G..
-r10 ............GGGG..
-''')
-GLASSES_FRONT = grid('''
-r0 ..................
-r1 ..................
-r2 ..................
-r3 ..................
-r4 ..................
-r5 ..................
-r6 ..................
-r7 ....GGGG..GGGG....
-r8 ...GG..GGGG..GG...
-r9 ....G..G..G..G....
-r10 ....GGGG..GGGG....
-''')
-
-TORSO_SIDE = grid('''
-r0
-r1
-r2
-r3
-r4
-r5
-r6
-r7
-r8
-r9
-r10
-r11
-r12
-r13
-r14 .....AAAAAAABB....
-r15 ....AAAAAAAABBA...
-r16 ....AAAAAAAABBA...
-r17 ....AAAAAAAABBA...
-r18 ....AAAAAAAABBA...
-r19 ....AAAAAAAAABA...
-r20 ....aAAAAAAAAAA...
-r21 ....aaAAAAAAAAa...
-''')
-ARM_SIDE = grid('''
-r0
-r1
-r2
-r3
-r4
-r5
-r6
-r7
-r8
-r9
-r10
-r11
-r12
-r13
-r14
-r15 .......aAa........
-r16 .......AAA........
-r17 .......AAA........
-r18 .......AAA........
-r19 .......AAA........
-r20 .......AAa........
-r21 .......SSS........
-r22 .......SSs........
-''')
-TORSO_FRONT = grid('''
-r0
-r1
-r2
-r3
-r4
-r5
-r6
-r7
-r8
-r9
-r10
-r11
-r12
-r13
-r14 ...AAAAaBBaAAAA...
-r15 ..AAAAAaBBaAAAAA..
-r16 ..AAAAAaBBaAAAAA..
-r17 ..AAAAAaBBaAAAAA..
-r18 ..AAAAAaBBaAAAAA..
-r19 ..AAAAAaBBaAAAAA..
-r20 ..aAAAAaBBaAAAAa..
-r21 ..aaAAAaBBaAAAaa..
-''')
-
-_LEG_TOP = ['' for _ in range(22)]
-LEGS = {
-    'stand': _LEG_TOP + grid('''
-r22 ....PPPPPPPPPPP...
-r23 ....PPPPPPPPPPP...
-r24 .....LLLLLLLLL....
-r25 .....LLLLlLLLL....
-r26 .....LLLLlLLLL....
-r27 .....LLLLlLLLL....
-r28 .....LLLLlLLLL....
-r29 .....LLLLlLLLL....
-r30 .....KKKKKKKKKK...
-r31 .....kkkkkkkkkk...
-'''),
-    'small': _LEG_TOP + grid('''
-r22 ....PPPPPPPPPPP...
-r23 ....PPPPPPPPPPP...
-r24 ....LLLLLlLLLLL...
-r25 ....LLLL.lLLLL....
-r26 ....LLLL..LLLL....
-r27 ...LLLL...LLLLL...
-r28 ...LLLL....LLLL...
-r29 ...LLL.....LLLL...
-r30 ..KKKKK....KKKKK..
-r31 ..kkkk.....kkkkk..
-'''),
-    'stride': _LEG_TOP + grid('''
-r22 ....PPPPPPPPPPP...
-r23 ....PPPPPPPPPPP...
-r24 ....LLLLLlLLLLL...
-r25 ...LLLLL.lLLLLL...
-r26 ...LLLL...LLLLL...
-r27 ..LLLL.....LLLLL..
-r28 ..LLLL.....LLLLL..
-r29 .LLLL.......LLLL..
-r30 KKKKK.......KKKKK.
-r31 kkkk........kkkkk.
-'''),
-    'jump': _LEG_TOP + grid('''
-r22 ....PPPPPPPPPPP...
-r23 ....PPPPPPPPPPPP..
-r24 ....LLLLLLLLLLLLL.
-r25 ....LLLLL..LLLLLL.
-r26 ...LLLL.....LLLLL.
-r27 ..LLLL......KKKKKK
-r28 .LLLL.......kkkkkk
-r29 KKKK..............
-r30 kkk...............
-'''),
-    'front': _LEG_TOP + grid('''
-r22 ...PPPPPPPPPPPP...
-r23 ...PPPPPPPPPPPP...
-r24 ....LLLLLLLLLL....
-r25 ....LLLLllLLLL....
-r26 ....LLLL..LLLL....
-r27 ....LLLL..LLLL....
-r28 ....LLLL..LLLL....
-r29 ....LLLL..LLLL....
-r30 ...KKKKK..KKKKK...
-r31 ...kkkkk..kkkkk...
-'''),
-}
-
-SKIRT_SIDE = _LEG_TOP + grid('''
-r22 ....QQQQQQQQQQQ...
-r23 ....QQQQQQQQQQQ...
-r24 ...QQqQQQqQQQQQ...
-r25 ...QQqQQQqQQQqQQ..
-r26 ..QQqQQQqQQQqQQQ..
-''')
-SKIRT_FRONT = _LEG_TOP + grid('''
-r22 ...QQQQQQQQQQQQ...
-r23 ...QQQQQQQQQQQQ...
-r24 ..QQqQQqQQqQQqQQ..
-r25 .QQqQQqQQqQQqQQQQ.
-r26 .QQqQQqQQqQQqQQqQ.
-''')
-SWEATER_SIDE = grid('''
-r0
-r1
-r2
-r3
-r4
-r5
-r6
-r7
-r8
-r9
-r10
-r11
-r12
-r13
-r14 .....YYYYYYYY.....
-r15 ....YyYYYYYYYY....
-r16 ...........YYY....
-r17 ...........YyY....
-r18 ............Y.....
-''')
-SWEATER_FRONT = grid('''
-r0
-r1
-r2
-r3
-r4
-r5
-r6
-r7
-r8
-r9
-r10
-r11
-r12
-r13
-r14 ...YYYYYYYYYYYY...
-r15 ..YYyYYYYYYYYyYY..
-r16 ......YYYYYY......
-r17 .......YyyY.......
-r18 ........YY........
-''')
+def pattern_fill(img, fn):
+    """不透明像素依 fn(x, y) 重新上色（格紋用）。"""
+    a = np.array(img)
+    ys, xs = np.nonzero(a[..., 3] > 0)
+    for y, x in zip(ys, xs):
+        a[y, x] = c(fn(x, y))
+    return Image.fromarray(a)
 
 
-def leg_rows(template, bottoms):
-    """把腿部版型的 L/l 依下身款式換成實際角色：長褲全是 P；短褲、裙子下半截露出皮膚與襪子。"""
-    out = []
-    for y, row in enumerate(template):
-        if bottoms == 'pants':
-            row = row.replace('L', 'P').replace('l', 'p')
-        elif bottoms == 'shorts':
-            row = row.replace('L', 'P' if y <= 25 else ('S' if y <= 28 else 'W')).replace('l', 'p' if y <= 25 else 's')
-        elif bottoms == 'skirt':
-            row = row.replace('L', 'S' if y <= 28 else 'W').replace('l', 's')
-        out.append(row)
-    return out
-
-
-# ------------------------------------------------------------ 六位團員：髮型（側面朝右／正面）與色盤
-HAIR = {
-    'susan': (grid('''
-r0 ......hHHHHh......
-r1 ....HHHHHHHHHH....
-r2 ...HHHHHHHHHHHH...
-r3 ..HHHHHHHHHHHHHH..
-r4 ..HHHHHHHHHHHHHHH.
-r5 ..HHHHHHHHHHHHHH..
-r6 .HHHHHHHHHHHHH....
-r7 .HHHhHHHHHH.......
-r8 .HHHHHHHHH........
-r9 .HHHHhHHHH........
-r10 .HHHHHHHHH........
-r11 .HHHHHHHH.........
-r12 .hHHHHHHh.........
-'''), grid('''
-r0 .....hHHHHHHh.....
-r1 ...HHHHHHHHHHHH...
-r2 ..HHHHHHHHHHHHHH..
-r3 .HHHHHHHHHHHHHHHH.
-r4 .HHHHHHHHHHHHHHHH.
-r5 .HHHHHHHHHHHHHHHH.
-r6 .HHH.HHH.HHH.HHHH.
-r7 .HHH..........HHH.
-r8 .HH............HH.
-r9 .HH............HH.
-r10 .HH............HH.
-r11 .HHH..........HHH.
-r12 .HHHh........hHHH.
-r13 ..hH..........Hh..
-''')),
-    'jimmy': (grid('''
-r0 .....hHHhHHh......
-r1 ...HHHHHHHHHHHH...
-r2 ..HHHHHhHHHHHHHH..
-r3 .HHhHHHHHHHHHHHHH.
-r4 .HHHHHHHHHHHHHHH..
-r5 .HHHhHHHHHHHHHh...
-r6 .HHHHHHHHH........
-r7 .HHhHHHH..........
-r8 ..HHHHH...........
-r9 ..HHHH............
-r10 ..HHH.............
-r11 ...H..............
-'''), grid('''
-r0 ....hHHhHHhHHh....
-r1 ...HHHHHHHHHHHH...
-r2 ..HHHHHhHHHHHHHH..
-r3 .HHHHHHHHHHHHHHHH.
-r4 .HHhHHHHHHHHHhHHH.
-r5 .HHHHHHHHHHHHHHHH.
-r6 .HHHHhHHHHHHhHHHH.
-r7 .HH.HH.HH.HH.H.HH.
-r8 .HH............HH.
-r9 .H..............H.
-''')),
-    'davidd': (grid('''
-r0 .....CCCCCC.......
-r1 ...CCCCCCCCCC.....
-r2 ..CCCCCCCCCCCC....
-r3 ..CCCCCCCCCCCCC...
-r4 ..CCCCCCCCCCCCcccc
-r5 ..hHHHHH..........
-r6 ..HHHHHH..........
-r7 ..HHHhH...........
-r8 ..HHHH............
-r9 ...HH.............
-'''), grid('''
-r0 .....CCCCCCCC.....
-r1 ...CCCCCCCCCCCC...
-r2 ..CCCCCCCwwCCCCC..
-r3 ..CCCCCCCCCCCCCC..
-r4 .cccccccccccccccc.
-r5 .HH..cccccccc..HH.
-r6 .HH............HH.
-r7 .H..............H.
-''')),
-    'raphael': (grid('''
-r0 ......hHHHh.......
-r1 ....hHHHHHHHH.....
-r2 ...HHHHHHHHHHHh...
-r3 ..hHHHHHHHHHHHHH..
-r4 ..HHHHHHHHHHHHHH..
-r5 ..HHHhHHHHHH......
-r6 ..HHHHHH..........
-r7 ..hHHHH...........
-r8 ..HHHH............
-r9 ..HHH.............
-r10 ...H.............
-r11 ..........x.x.....
-r12 .........x.x.x....
-'''), grid('''
-r0 .....hHHHHHHh.....
-r1 ...hHHHHHHHHHHh...
-r2 ..HHHHhHHHHHHHHH..
-r3 ..HHHHHHHHhHHHHH..
-r4 .HHHHHHHHHHHHHHHH.
-r5 .HHHHHH....HHHHHH.
-r6 .HHH.........HHHH.
-r7 .HH............HH.
-r8 .H..............H.
-r9 ..................
-r10 ..................
-r11 ...x.x......x.x...
-r12 ....x.x....x.x....
-''')),
-    'freda': (grid('''
-r0 ......hHHHHh......
-r1 ....HHHHHHHHHH....
-r2 ...HHHHHHHHHHHH...
-r3 ..HHHHHHHHHHHHHH..
-r4 ..HHHHHHHHHHHHHHH.
-r5 .HHHHHHHHHHHHHH...
-r6 .HHHHHHHHHHHH.....
-r7 .HHHHHHHHH........
-r8 HHHHhHHHHH........
-r9 HHHHHHHHH.........
-r10 HHHHHHHHH.........
-r11 HHHHhHHHH.........
-r12 HHHHHHHH..........
-r13 HHHHHHHH..........
-r14 HHHHHHH...........
-r15 .HHHHHH...........
-r16 .HHHHH............
-r17 ..hHH.............
-'''), grid('''
-r0 .....hHHHHHHh.....
-r1 ...HHHHHHHHHHHH...
-r2 ..HHHHHHHHHHHHHH..
-r3 .HHHHHHHHHHHHHHHH.
-r4 .HHHHHHHhHHHHHHHH.
-r5 .HHHHHH...HHHHHHH.
-r6 .HHHHH......HHHHH.
-r7 HHHH..........HHHH
-r8 HHH............HHH
-r9 HHH............HHH
-r10 HHH............HHH
-r11 HHH............HHH
-r12 HHHH..........HHHH
-r13 HHHH..........HHHH
-r14 HHHH..........HHHH
-r15 HHHH..........HHHH
-r16 .HHH..........HHH.
-r17 .hH............Hh.
-''')),
-    'anderson': (grid('''
-r0 ....CCCCCC........
-r1 ...CCcCCCCCC......
-r2 ..CCCCCCCCCCC.....
-r3 ..CCcCCCCCCCCC....
-r4 ..CCCCCCCCCCCCC...
-r5 ..cccccccccccccc..
-r6 .HHHHHHH..........
-r7 .HHhHHHH..........
-r8 .HHHHHH...........
-r9 HHHHHHH...........
-r10 HHhHHHH...........
-r11 HHHHHHH..XXXXX....
-r12 .HHHHHXXXXXXXXXX..
-r13 .HHHH..XXXXXXXX...
-r14 ..HHH....XXXXX....
-r15 ...H..............
-'''), grid('''
-r0 .....CCCCCCCC.....
-r1 ....CCCCcCCCCC....
-r2 ...CCCCCCCCcCCC...
-r3 ..CCcCCCCCCCCCCC..
-r4 ..cccccccccccccc..
-r5 .HHH..........HHH.
-r6 .HH............HH.
-r7 HHH............HHH
-r8 HHH............HHH
-r9 HHH............HHH
-r10 HHHXX........XXHHH
-r11 HHHXXXX....XXXXHHH
-r12 .HHXXXXXXXXXXXXHH.
-r13 .HH.XXXXXXXXXX.HH.
-r14 .HH...XXXXXX...HH.
-r15 ..H............H..
-''')),
-}
-
-COMMON = {'S': SKIN, 's': SKIN_D, 'E': '#1c2242', 'M': '#a83a44', 'W': '#ffffff', 'r': '#f39a8a',
-          'K': '#3a78d8', 'k': '#ffffff'}
-JEANS = {'P': '#3a72c8', 'p': '#2a5498'}
-
+# ------------------------------------------------------------ 服裝（配色取自海報）
+JEANS = ('#3a6cb4', '#2a5090')
 CHARS = {
-    'susan': dict(pal={'H': '#6a3a24', 'h': '#4a2616', 'A': '#f6f6f8', 'a': '#c6cad6', 'B': '#f6f6f8',
-                       'Y': '#9aa0ac', 'y': '#6e7482', 'Q': '#4a4e7e', 'q': '#34385e', 'P': '#4a4e7e', 'p': '#34385e'},
-                  bottoms='skirt', extra='sweater', instrument='mic'),
-    'jimmy': dict(pal={'H': '#2a1e1a', 'h': '#4a3a30', 'A': '#4aa08a', 'a': '#1e5e50', 'B': '#ffffff',
-                       'G': '#1c1c28', **JEANS},
-                  bottoms='pants', glasses=True, plaid=('#e8f4ee', '#4aa08a', '#1e5e50'), instrument='keytar'),
-    'davidd': dict(pal={'C': '#23407e', 'c': '#162a5a', 'w': '#ffffff', 'H': '#1c1c28', 'h': '#3a3a48',
-                        'A': '#e8f2fa', 'a': '#b0c8dc', 'B': '#ffffff', 'P': '#3c6cc0', 'p': '#2a4e90',
-                        'K': '#c4c8d2'},
-                   bottoms='shorts', instrument='bass'),
-    'raphael': dict(pal={'H': '#b8b8c0', 'h': '#6c6c76', 'A': '#e8b848', 'a': '#b8862a', 'B': '#26262e',
-                         'G': '#2a2a30', 'x': '#c48a62', 'K': '#22305a', 'k': '#e8e0d0', **JEANS},
-                    bottoms='pants', glasses=True, instrument='guitar'),
-    'freda': dict(pal={'H': '#1c1a24', 'h': '#3a3646', 'A': '#5cbcee', 'a': '#3a8cc4', 'B': '#1c1c28',
-                       'P': '#1c2440', 'p': '#10162a', 'K': '#3a7ad8'},
-                  bottoms='pants', instrument='mic'),
-    'anderson': dict(pal={'C': '#2f5fb8', 'c': '#1f4488', 'H': '#8a7a6a', 'h': '#5a4a3e', 'X': '#ececf0',
-                          'A': '#e04848', 'a': '#9e2a2a', 'B': '#1c2244', 'G': '#9a6a2a',
-                          'K': '#22305a', 'k': '#e8e0d0', **JEANS},
-                     bottoms='pants', glasses=True, plaid=('#f6f0f0', '#e04848', '#9e2a2a'), instrument='snare'),
+    'susan':    dict(top=('#f6f6f8', '#c8ccd6'), inner=None, bottoms='skirt', low=('#6a6c78', '#4e505a'),
+                     shoe=('#2c4a8a', WHITE), extra='sweater', instrument='mic'),
+    'jimmy':    dict(top=('#3e7060', '#22443a'), inner=WHITE, bottoms='pants', low=JEANS,
+                     shoe=('#22305a', WHITE), plaid=('#e6ece6', '#3e7060', '#1e3a30'), instrument='keytar'),
+    'davidd':   dict(top=('#dfe4e8', '#aab4bc'), inner=WHITE, bottoms='shorts', low=('#3e70b8', '#2c5290'),
+                     shoe=('#d6d8dc', WHITE), socks=True, instrument='bass'),
+    'raphael':  dict(top=('#dcbc84', '#b08c58'), inner='#26262c', bottoms='pants', low=JEANS,
+                     shoe=('#2a2a32', '#e8e0d0'), instrument='guitar'),
+    'freda':    dict(top=('#82b4dc', '#5486b8'), inner='#1e1e26', bottoms='pants', low=('#22222c', '#14141a'),
+                     shoe=('#3a68b0', WHITE), instrument='mic'),
+    'anderson': dict(top=('#d84040', '#9e2a2a'), inner='#1e1e26', bottoms='pants', low=JEANS,
+                     shoe=('#22305a', '#e8e0d0'), plaid=('#f4eeee', '#d84040', '#8e2626'), instrument='snare'),
 }
 ORDER = ['susan', 'jimmy', 'davidd', 'raphael', 'freda', 'anderson']
-
-
-def palette(name):
-    return {**COMMON, **CHARS[name]['pal']}
+SWEATER = ('#8c8c94', '#66666e')
 
 
 def plaid_fn(name):
-    """格紋襯衫：A/a 依 2x2 格交錯成淺、中、深三色（a 是暗面，整體再暗一階）。"""
     pl = CHARS[name].get('plaid')
     if not pl:
         return None
     light, mid, dark = pl
 
-    def f(ch, x, y):
-        if ch not in 'Aa':
-            return None
-        n = (x // 2) % 2 + (y // 2) % 2
-        if ch == 'a':
-            n = min(n + 1, 2)
-        return (light, mid, dark)[n]
+    def f(x, y):
+        return (light, mid, dark)[(x // 3) % 2 + (y // 3) % 2]
     return f
 
 
-# ------------------------------------------------------------ 組裝
-def head(name, view):
-    cfg, pal = CHARS[name], palette(name)
-    side = view == 'side'
-    img = paint(blank(), HEAD_SIDE if side else HEAD_FRONT, pal)
-    img = paint(img, FACE_SIDE if side else FACE_FRONT, pal)
-    img = paint(img, HAIR[name][0 if side else 1], pal)
-    if cfg.get('glasses'):
-        img = paint(img, GLASSES_SIDE if side else GLASSES_FRONT, pal)
-    if name == 'anderson' and not side:
-        img = paint(img, FACE_FRONT[11:13] and [''] * 11 + ['.......MWWM.......'], pal)   # 鬍子中間露出嘴
-    return outline(img)
+def head(name):
+    """海報擷取的頭，下巴中心對齊 (15, NECK_Y)。"""
+    h = Image.open(HERE / 'heads' / f'{name}.png').convert('RGBA')
+    L = blank()
+    L.alpha_composite(h, P(15 - h.width // 2, NECK_Y - h.height))
+    return outline(L)
 
 
-def body_parts(name, view, legs='stand', arm=ARM_SIDE):
-    """回傳 (腿, 裙, 身體, 手臂) 四個已加外框的部位；正面不含手臂。"""
-    cfg, pal, pat = CHARS[name], palette(name), plaid_fn(name)
-    side = view == 'side'
-    L = part(leg_rows(LEGS[legs if side else 'front'], cfg['bottoms']), pal)
-    skirt = part(SKIRT_SIDE if side else SKIRT_FRONT, pal) if cfg['bottoms'] == 'skirt' else None
-    torso = paint(blank(), TORSO_SIDE if side else TORSO_FRONT, pal, pattern=pat)
-    if cfg.get('extra') == 'sweater':
-        torso = paint(torso, SWEATER_SIDE if side else SWEATER_FRONT, pal)
-    torso = outline(torso)
-    a = part(arm, pal, pattern=pat) if side and arm else None
-    return L, skirt, torso, a
+# ------------------------------------------------------------ 軀幹
+def inner_poly(view):
+    if view == 'side':
+        return [P(19, 25), P(21, 25), P(23, 31), P(22, 36), P(20, 36)]
+    return [P(12, 26), P(18, 26), P(17, 37), P(13, 37)]
 
 
-def bare(name, view='side', legs='stand'):
-    L, skirt, torso, a = body_parts(name, view, legs)
-    return stack(L, skirt, torso, head(name, view), a)
+def torso(name, view):
+    cfg = CHARS[name]
+    top, shade = cfg['top']
+    L = blank()
+    d = ImageDraw.Draw(L)
+    if view == 'side':
+        d.polygon([P(9, 25), P(21, 25), P(23, 31), P(22, 42), P(9, 42), P(8, 31)], fill=c(top))
+        d.polygon([P(8, 31), P(9, 25), P(11, 25), P(11, 42), P(9, 42)], fill=c(shade))      # 背面暗部
+    else:
+        d.polygon([P(5, 26), P(25, 26), P(26, 31), P(24, 42), P(6, 42), P(4, 31)], fill=c(top))
+        d.rectangle([P(5, 36), P(7, 42)], fill=c(shade)); d.rectangle([P(23, 36), P(25, 42)], fill=c(shade))
+    fn = plaid_fn(name)
+    if fn:
+        L = pattern_fill(L, fn)
+        d = ImageDraw.Draw(L)
+    if cfg['inner']:                         # 敞開的襯衫／外套裡的內搭
+        d.polygon(inner_poly(view), fill=c(cfg['inner']))
+        if view != 'side':
+            d.line([P(12, 26), P(14, 38)], fill=c(shade)); d.line([P(18, 26), P(16, 38)], fill=c(shade))
+    if cfg.get('extra') == 'sweater':       # 綁在肩上的灰毛衣
+        if view == 'side':
+            d.polygon([P(8, 25), P(22, 25), P(22, 28), P(9, 29)], fill=c(SWEATER[0]))
+            d.polygon([P(19, 28), P(23, 28), P(22, 34), P(20, 34)], fill=c(SWEATER[1]))
+        else:
+            d.polygon([P(4, 26), P(26, 26), P(25, 29), P(5, 29)], fill=c(SWEATER[0]))
+            d.polygon([P(12, 28), P(18, 28), P(17, 35), P(15, 33), P(13, 35)], fill=c(SWEATER[1]))
+    if cfg['bottoms'] != 'skirt':           # 褲頭
+        lo = cfg['low'][0]
+        if view == 'side':
+            d.rectangle([P(9, 41), P(22, 44)], fill=c(lo))
+        else:
+            d.rectangle([P(6, 41), P(24, 44)], fill=c(lo))
+    return outline(L)
 
 
-def preview(frames, scale=6, bg=(200, 220, 240, 255)):
-    W = sum(f.width for f in frames[0])
-    sheet = Image.new('RGBA', (W, CH * len(frames)), bg)
-    for r, row in enumerate(frames):
-        x = 0
-        for f in row:
-            sheet.alpha_composite(f, (x, r * CH)); x += f.width
-    return sheet.resize((sheet.width * scale, sheet.height * scale), Image.NEAREST)
+def skirt(name, view):
+    if CHARS[name]['bottoms'] != 'skirt':
+        return None
+    col, shade = CHARS[name]['low']
+    L = blank()
+    d = ImageDraw.Draw(L)
+    if view == 'side':
+        d.polygon([P(9, 40), P(22, 40), P(25, 50), P(6, 50)], fill=c(col))
+        for x in (10, 15, 20):
+            d.line([P(x, 42), P(x + (x - 15) // 3, 50)], fill=c(shade))
+    else:
+        d.polygon([P(6, 40), P(24, 40), P(27, 50), P(3, 50)], fill=c(col))
+        for x in (8, 12, 16, 20):
+            d.line([P(x, 42), P(x + (x - 15) // 3, 50)], fill=c(shade))
+    return outline(L)
 
 
-# ------------------------------------------------------------ 樂器（直立畫，琴頭朝上）
-INST_PAL = {'D': '#5a3418', 'N': '#7a4a22', 'T': '#e5a858', 't': '#c07830', 'O': '#2a160a',
-            'R': '#d23a3a', 'r': '#9e2828', 'W': '#f4f4f6', 'K': '#202024', 'Y': '#ffd040', 'B': '#5ad0ff',
-            'G': '#8a90a4', 'L': '#e8ecf4', 'n': '#e3bd7a', 'P': '#e84a6e', 'p': '#b8304e'}
-GUITAR = (grid('''
-r0 ..DDDD..
-r1 ..DDDD..
-r2 ..DDDD..
-r3 ...NN...
-r4 ...NN...
-r5 ...NN...
-r6 ...NN...
-r7 ...NN...
-r8 ...NN...
-r9 ..TTTT..
-r10 .TTTTTt.
-r11 .TTTTTt.
-r12 .TTOOTt.
-r13 ..TOOT..
-r14 .TTTTTt.
-r15 TTTTTTTt
-r16 TTTTTTTt
-r17 TTDDDDTt
-r18 TTTTTTTt
-r19 .TTTTTt.
-r20 ..TTTT..
-'''), (4, 15))
-BASS = (grid('''
-r0 ..KKK...
-r1 ..KKK...
-r2 ..KKK...
-r3 ...nn...
-r4 ...nn...
-r5 ...nn...
-r6 ...nn...
-r7 ...nn...
-r8 ...nn...
-r9 ...nn...
-r10 ...nn...
-r11 ...nn...
-r12 ...nn...
-r13 ...nn...
-r14 ...nn...
-r15 RR.nn...
-r16 RR.nn.R.
-r17 RRRnnRR.
-r18 RRRRRRRr
-r19 RRWWWWRr
-r20 RRWKKWRr
-r21 RRWWWWRr
-r22 RRWKKWRr
-r23 .RRRRRr.
-r24 ..RRRr..
-'''), (4, 20))
-KEYTAR = (grid('''
-r0 .KK...
-r1 .KY...
-r2 .KK...
-r3 .KK...
-r4 .KB...
-r5 .KK...
-r6 .KK...
-r7 PPPPPP
-r8 PWWWWp
-r9 PKKWWp
-r10 PWWWWp
-r11 PKKWWp
-r12 PWWWWp
-r13 PKKWWp
-r14 PWWWWp
-r15 PWWWWp
-r16 PKKWWp
-r17 PWWWWp
-r18 PKKWWp
-r19 PWWWWp
-r20 PPPPPp
-'''), (3, 13))
-SNARE_SIDE = grid('''
-r0 RRRRRRRRR
-r1 WGWWGWWGW
-r2 WGWWGWWGW
-r3 WGWWGWWGW
-r4 RRRRRRRRR
-''')
-SNARE_FRONT = grid('''
-r0 .LLLLLLLLLLLL.
-r1 RRRRRRRRRRRRRR
-r2 WGWWGWWGWWGWWG
-r3 WGWWGWWGWWGWWG
-r4 WGWWGWWGWWGWWG
-r5 rrrrrrrrrrrrrr
-''')
-STRAP = '#3b2416'
-STICK, STICK_TIP = '#e8c890', '#fff2d0'
-MIC_HEAD, MIC_HANDLE = '#c8ccd8', '#24242c'
+# ------------------------------------------------------------ 腿
+def leg_points(hip, thigh_deg, shin_deg):
+    a, b = math.radians(thigh_deg), math.radians(shin_deg)
+    knee = (hip[0] + THIGH * math.sin(a), hip[1] + THIGH * math.cos(a))
+    ankle = (knee[0] + SHIN * math.sin(b), knee[1] + SHIN * math.cos(b))
+    return knee, ankle
 
 
-def inst_part(inst, angle, at):
-    """直立樂器旋轉 angle 度（正值逆時針、琴頭往左倒）後，讓錨點落在格座標 at，再加外框。"""
-    rows, anchor = inst
-    piece = paint(Image.new('RGBA', (max(map(len, rows)), len(rows)), (0, 0, 0, 0)), rows, INST_PAL, 0, 0)
+def one_leg(name, d, hip, thigh_deg, shin_deg, dark=False, side=True):
+    cfg = CHARS[name]
+    lo = cfg['low'][1 if dark else 0]
+    knee, ankle = leg_points(hip, thigh_deg, shin_deg)
+    if cfg['bottoms'] == 'pants':
+        limb(d, [hip, knee, ankle], lo, 6)
+    elif cfg['bottoms'] == 'shorts':
+        mid = ((hip[0] + knee[0]) / 2, (hip[1] + knee[1]) / 2)
+        limb(d, [mid, knee, ankle], SKIN, 4)
+        limb(d, [hip, mid], lo, 7)
+    else:
+        limb(d, [hip, knee, ankle], SKIN, 4)
+    if cfg.get('socks') or cfg['bottoms'] == 'skirt':
+        limb(d, [(ankle[0], ankle[1] - 2), ankle], WHITE, 4)
+    shoe, sole = cfg['shoe']
+    x, y = round(ankle[0]), round(ankle[1])
+    x0, x1 = (x - 3, x + 5) if side else (x - 3, x + 3)   # 側面鞋尖朝前
+    d.rectangle([P(x0, y), P(x1, y + 2)], fill=c(shoe))
+    d.rectangle([P(x0, y + 2), P(x1, y + 2)], fill=c(sole))
+
+
+# 側面腿部姿勢：(前腳大腿, 前腳小腿, 後腳大腿, 後腳小腿) 角度，正值往前（右）
+SIDE_LEGS = {
+    'walk1': (4, 0, -4, -6),
+    'walk2': (18, 4, -16, -26),
+    'walk3': (30, 10, -28, -38),
+    'jump':  (80, -5, -22, -45),
+}
+
+
+def legs_side(name, pose):
+    tf, sf, tb, sb = SIDE_LEGS[pose]
+    hip = (15, HIP_Y)
+    back, front = blank(), blank()
+    one_leg(name, ImageDraw.Draw(back), hip, tb, sb, dark=True)
+    one_leg(name, ImageDraw.Draw(front), hip, tf, sf)
+    return stack(outline(back), outline(front))
+
+
+def legs_front(name):
+    L = blank()
+    d = ImageDraw.Draw(L)
+    one_leg(name, d, (11, HIP_Y), 0, 0, side=False)
+    one_leg(name, d, (19, HIP_Y), 0, 0, side=False)
+    return outline(L)
+
+
+# ------------------------------------------------------------ 手臂
+def sleeve(name):
+    pl = CHARS[name].get('plaid')
+    return pl[1] if pl else CHARS[name]['top'][0]
+
+
+def arm(name, pts):
+    """肩→肘→手；袖子 5 格粗、手 4x4。"""
+    L = blank()
+    d = ImageDraw.Draw(L)
+    limb(d, pts, sleeve(name), 5)
+    x, y = pts[-1]
+    d.rectangle([P(x - 2, y - 1), P(x + 1, y + 2)], fill=c(SKIN))
+    return outline(L)
+
+
+# ------------------------------------------------------------ 樂器（直立畫，琴頭朝上；回傳圖與錨點）
+def layer(w, h):
+    im = Image.new('RGBA', (w, h), (0, 0, 0, 0))
+    return im, ImageDraw.Draw(im)
+
+
+def acoustic_guitar():
+    im, d = layer(13, 37)
+    d.rectangle([4, 0, 8, 4], fill=c('#5a3418'))                  # 琴頭
+    d.rectangle([5, 4, 7, 17], fill=c('#7a4a22'))                 # 琴頸
+    d.ellipse([2, 14, 10, 25], fill=c('#e5a858'))                 # 上半琴身
+    d.ellipse([0, 21, 12, 36], fill=c('#e5a858'))                 # 下半琴身
+    d.rectangle([9, 23, 11, 33], fill=c('#c07830'))               # 暗面
+    im = inner_outline(im, OUT)
+    d = ImageDraw.Draw(im)
+    d.line([6, 5, 6, 17], fill=c('#3e2210'))                      # 指板
+    d.ellipse([5, 22, 7, 24], fill=c('#2a160a'))                  # 音孔
+    d.line([4, 30, 8, 30], fill=c('#5a3418'))                     # 琴橋
+    for y in (1, 3):
+        d.point((3, y), fill=c('#d8d8e0')); d.point((9, y), fill=c('#d8d8e0'))
+    return im, (6, 28)
+
+
+def electric_bass():
+    im, d = layer(14, 45)
+    d.rectangle([4, 0, 8, 5], fill=c('#2a2a30'))                  # 琴頭
+    d.rectangle([5, 5, 7, 30], fill=c('#e3bd7a'))                 # 楓木琴頸
+    d.ellipse([1, 28, 13, 44], fill=c('#b8322a'))                 # 琴身
+    d.rectangle([1, 24, 4, 33], fill=c('#b8322a'))                # 上琴角（較長）
+    d.rectangle([10, 27, 12, 33], fill=c('#b8322a'))              # 下琴角
+    d.rectangle([10, 34, 12, 41], fill=c('#6e1c18'))              # 暗面
+    im = inner_outline(im, OUT)
+    d = ImageDraw.Draw(im)
+    d.rectangle([3, 31, 8, 39], fill=c('#f2f2f2'))                # 護板
+    d.line([4, 33, 8, 33], fill=c('#202024'))                     # 拾音器
+    d.line([4, 37, 8, 37], fill=c('#202024'))
+    for y in (11, 17, 23):
+        d.point((6, y), fill=c('#5a3418'))                        # 把位點
+    for y in (1, 3):
+        d.point((3, y), fill=c('#d8d8e0')); d.point((9, y), fill=c('#d8d8e0'))
+    return im, (7, 36)
+
+
+def keytar():
+    im, d = layer(10, 38)
+    d.rectangle([3, 0, 6, 12], fill=c('#2a2a36'))                 # 握把
+    d.rectangle([0, 11, 9, 37], fill=c('#2a2a32'))                # 琴身（黑）
+    d.rectangle([8, 12, 9, 36], fill=c('#d8323a'))                # 紅色飾條
+    im = inner_outline(im, OUT)
+    d = ImageDraw.Draw(im)
+    d.rectangle([2, 13, 6, 34], fill=c('#f6f6f6'))                # 白鍵
+    for y in range(14, 34, 2):
+        d.line([2, y, 6, y], fill=c('#b8bcc8'))                   # 鍵縫
+    for y in (15, 17, 21, 23, 25, 29, 31):
+        d.line([2, y, 3, y], fill=c('#202024'))                   # 黑鍵
+    d.point((4, 4), fill=c('#ffd040')); d.point((4, 7), fill=c('#d8323a'))  # 握把上的鈕
+    return im, (5, 24)
+
+
+def inst(piece_anchor, angle, at):
+    """直立樂器旋轉 angle 度（正值逆時針、琴頭往左倒）後，讓錨點落在角色座標 at。"""
+    piece, anchor = piece_anchor
     w, h = piece.size
     rot = piece.rotate(angle, resample=Image.NEAREST, expand=True)
     t = math.radians(angle)
@@ -784,120 +316,146 @@ def inst_part(inst, angle, at):
     rx = vx * math.cos(t) + vy * math.sin(t) + rot.width / 2
     ry = -vx * math.sin(t) + vy * math.cos(t) + rot.height / 2
     L = blank()
-    L.alpha_composite(rot, (round(OX + at[0] - rx), round(OY + at[1] - ry)))
-    return outline(L)
+    x, y = P(*at)
+    L.alpha_composite(rot, (round(x - rx), round(y - ry)))
+    return L
 
 
-def mic_part(x, y):
-    """麥克風：(x, y) 是握柄底端，網罩（3x2）在上方。"""
+def snare_side(at):
+    im, d = layer(15, 11)
+    d.rectangle([0, 0, 14, 10], fill=c('#f0f0f4'))
+    im = inner_outline(im, OUT)
+    d = ImageDraw.Draw(im)
+    d.line([1, 1, 13, 1], fill=c('#c83030')); d.line([1, 9, 13, 9], fill=c('#c83030'))   # 鼓圈
+    for x in (2, 5, 8, 11):
+        d.line([x, 2, x, 8], fill=c('#8a90a4'))                   # 張力螺桿
     L = blank()
-    L = paint(L, ['.H.', '.H.', '.H.'], {'H': MIC_HANDLE}, OX + x - 1, OY + y - 2)
-    L = paint(L, ['GGG', 'GgG'], {'G': MIC_HEAD, 'g': '#8a90a4'}, OX + x - 1, OY + y - 4)
+    L.alpha_composite(im, P(*at))
+    return L
+
+
+def snare_front(at):
+    im, d = layer(24, 12)
+    d.ellipse([0, 0, 23, 5], fill=c('#e8ecf4'))                   # 鼓面
+    d.rectangle([0, 3, 23, 11], fill=c('#f0f0f4'))
+    im = inner_outline(im, OUT)
+    d = ImageDraw.Draw(im)
+    d.line([1, 4, 22, 4], fill=c('#c83030')); d.line([1, 10, 22, 10], fill=c('#9e2626'))
+    for x in range(2, 21, 4):
+        d.line([x, 5, x + 2, 9], fill=c('#8a90a4'))               # 斜向螺桿
+    L = blank()
+    L.alpha_composite(im, P(*at))
+    return L
+
+
+def mic(x, y):
+    """麥克風：(x, y) 是握柄底端，網罩在上方。"""
+    L = blank()
+    d = ImageDraw.Draw(L)
+    d.rectangle([P(x, y - 4), P(x + 1, y)], fill=c('#24242c'))   # 握柄
+    d.rectangle([P(x - 1, y - 8), P(x + 2, y - 5)], fill=c('#c8ccd8'))  # 網罩
+    d.point(P(x, y - 7), fill=c('#f4f6fa')); d.point(P(x + 1, y - 6), fill=c('#8a90a4'))
     return outline(L)
 
 
-def stick_part(a, b):
-    L = line_part([([a, b], STICK, 1)])
-    return dots(L, [b], STICK_TIP)
+def stick(a, b):
+    L = blank()
+    ImageDraw.Draw(L).line([P(*a), P(*b)], fill=c('#e8c890'), width=2)
+    return outline(L)
+
+
+def strap(a, b, col='#3b2416'):
+    L = blank()
+    ImageDraw.Draw(L).line([P(*a), P(*b)], fill=c(col), width=2)
+    return L
 
 
 # ------------------------------------------------------------ 姿勢
-def sleeve(name):
-    pl = CHARS[name].get('plaid')
-    return pl[1] if pl else CHARS[name]['pal']['A']
+# 側面手臂（肩→肘→手）；走路時手前後擺
+SIDE_ARM = {
+    'walk1': [(15, 27), (15, 34), (16, 40)],
+    'walk2': [(15, 27), (17, 34), (20, 39)],
+    'walk3': [(15, 27), (13, 34), (12, 40)],
+}
+RAISED = [(15, 27), (22, 27), (25, 19)]   # 跳躍：前面那隻手往前上方舉（在下巴前方，不遮臉）
 
 
-def arm_part(name, pts):
-    """正面手臂：pts 是肩→肘→手的格座標，袖子 3 格粗、手 2x2。"""
-    return line_part([(pts, sleeve(name), 3), ([pts[-1]], SKIN, 2)])
-
-
-def side_frame(name, legs='stand'):
-    cfg = CHARS[name]
-    inst = cfg['instrument']
-    jump = legs == 'jump'
-    L, skirt, torso, arm = body_parts(name, 'side', legs, None if jump else ARM_SIDE)
-    back = front = held = raised = None
-    straps = []
-    if inst == 'guitar':
-        back = inst_part(GUITAR, 30 + 10 * jump, (5, 19))
-    elif inst == 'bass':
-        back = inst_part(BASS, 25 + 10 * jump, (5, 20))
-    elif inst == 'keytar':
-        back = inst_part(KEYTAR, 55 + 8 * jump, (4, 17))
+def side_frame(name, pose):
+    kind = CHARS[name]['instrument']
+    jump = pose == 'jump'
+    back, front, held = None, [], []
+    if kind == 'guitar':
+        back = inst(acoustic_guitar(), 30 + 10 * jump, (9, 38))
+    elif kind == 'bass':
+        back = inst(electric_bass(), 24 + 10 * jump, (9, 40))
+    elif kind == 'keytar':
+        back = inst(keytar(), 52 + 8 * jump, (9, 34))
     if back is not None:
-        straps = [(12, 14), (11, 15), (10, 16), (9, 17), (8, 18), (7, 19), (6, 20)]
-    if inst == 'snare':
-        front = part(SNARE_SIDE, INST_PAL, x0=OX + 12, y0=OY + 18 - jump)
-        straps = [(13, 14), (13, 15), (13, 16), (13, 17)]
-    if jump:   # 前面那隻手先往前、再從下巴前方往上舉（不遮臉）
-        raised = [line_part([([(9, 16), (16, 16), (18, 10)], sleeve(name), 3), ([(18, 9)], SKIN, 3)])]
-        if inst == 'mic':
-            raised.append(mic_part(18, 8))
-        if inst == 'snare':
-            raised.append(stick_part((18, 8), (20, 2)))
-    else:
-        if inst == 'mic':
-            held = mic_part(8, 22)
-        if inst == 'snare':
-            held = stick_part((9, 22), (15, 17))
-    torso = dots(torso, straps, '#8a90a4' if inst == 'snare' else STRAP)
-    return stack(back, L, skirt, torso, head(name, 'side'), front, arm, held, *(raised or []))
+        front.append(strap((20, 26), (10, 41)))
+    if kind == 'snare':
+        front.append(strap((20, 26), (21, 33), '#8a90a4'))
+        front.append(snare_side((18, 33 - jump)))
+    pts = RAISED if jump else SIDE_ARM[pose]
+    hx, hy = pts[-1]
+    if kind == 'mic':
+        held.append(mic(hx - 1, hy - 1))
+    if kind == 'snare':
+        held.append(stick((hx, hy), (hx + 4, hy - 8) if jump else (hx + 7, hy - 5)))
+    return stack(back, legs_side(name, pose), skirt(name, 'side'), torso(name, 'side'), head(name),
+                 *front, arm(name, pts), *held)
 
 
-# 正面演奏兩格：每格是（左手、右手）的肩→肘→手座標；「左」指畫面左邊
+# 正面演奏兩格：每格（畫面左手、畫面右手）的肩→肘→手
 PLAY = {
-    'guitar': [([(2, 15), (0, 19), (5, 20)], [(15, 15), (18, 18), (15, 17)]),
-               ([(2, 15), (0, 20), (5, 23)], [(15, 15), (18, 18), (15, 17)])],
-    'bass':   [([(2, 15), (0, 19), (6, 20)], [(15, 15), (18, 18), (16, 16)]),
-               ([(2, 15), (0, 20), (7, 22)], [(15, 15), (18, 17), (17, 15)])],
-    'keytar': [([(2, 15), (0, 19), (5, 20)], [(15, 15), (17, 18), (16, 19)]),
-               ([(2, 15), (1, 19), (9, 20)], [(15, 15), (17, 18), (16, 19)])],
-    'snare':  [([(2, 15), (0, 18), (3, 16)], [(15, 15), (17, 19), (13, 20)]),
-               ([(2, 15), (0, 19), (4, 20)], [(15, 15), (17, 18), (14, 16)])],
-    'mic':    [([(2, 15), (1, 19), (1, 21)], [(15, 15), (16, 19), (10, 16)]),
-               ([(2, 15), (-1, 12), (-1, 9)], [(15, 15), (16, 19), (10, 16)])],
+    'guitar': [([(5, 28), (2, 34), (9, 35)], [(25, 28), (29, 33), (26, 32)]),
+               ([(5, 28), (2, 36), (9, 40)], [(25, 28), (29, 33), (26, 32)])],
+    'bass':   [([(5, 28), (2, 34), (10, 36)], [(25, 28), (30, 32), (27, 30)]),
+               ([(5, 28), (2, 36), (12, 39)], [(25, 28), (30, 31), (28, 29)])],
+    'keytar': [([(5, 28), (2, 33), (9, 36)], [(25, 28), (29, 32), (28, 34)]),
+               ([(5, 28), (4, 34), (15, 36)], [(25, 28), (29, 32), (28, 34)])],
+    'snare':  [([(5, 28), (1, 32), (6, 29)], [(25, 28), (28, 34), (22, 37)]),
+               ([(5, 28), (2, 34), (8, 37)], [(25, 28), (29, 32), (24, 29)])],
+    'mic':    [([(5, 28), (3, 34), (4, 40)], [(25, 28), (28, 33), (18, 27)]),
+               ([(5, 28), (0, 21), (0, 15)], [(25, 28), (28, 33), (18, 27)])],
 }
 
 
 def front_frame(name, k):
-    inst = CHARS[name]['instrument']
-    L, skirt, torso, _ = body_parts(name, 'front')
-    held = []
-    if inst == 'guitar':
-        held.append(inst_part(GUITAR, -70, (5, 21)))
-    elif inst == 'bass':
-        held.append(inst_part(BASS, -65, (5, 21)))
-    elif inst == 'keytar':
-        held.append(inst_part(KEYTAR, -80, (7, 21)))
-    elif inst == 'snare':
-        held.append(part(SNARE_FRONT, INST_PAL, x0=OX + 2, y0=OY + 21))
-    la, ra = PLAY[inst][k]
-    arms = [arm_part(name, la), arm_part(name, ra)]
-    extra = []
-    if inst == 'snare':   # 舉高的那支鼓棒朝上、敲下去的那支碰鼓面
-        extra = [stick_part((3, 16), (5, 10)), stick_part((13, 20), (10, 21))] if k == 0 else \
-                [stick_part((4, 20), (7, 21)), stick_part((14, 16), (12, 10))]
-    if inst == 'mic':
-        extra = [mic_part(10, 15)]
-    return stack(L, skirt, torso, head(name, 'front'), *held, *arms, *extra)
-
-
-FRAMES = {
-    'right_walk1': lambda n: side_frame(n, 'stand'),
-    'right_walk2': lambda n: side_frame(n, 'small'),
-    'right_walk3': lambda n: side_frame(n, 'stride'),
-    'right_jump': lambda n: side_frame(n, 'jump'),
-    'front_play1': lambda n: front_frame(n, 0),
-    'front_play2': lambda n: front_frame(n, 1),
-}
+    kind = CHARS[name]['instrument']
+    held, extra = [], []
+    if kind == 'guitar':
+        held.append(inst(acoustic_guitar(), -70, (9, 38)))
+    elif kind == 'bass':
+        held.append(inst(electric_bass(), -65, (9, 38)))
+    elif kind == 'keytar':
+        held.append(inst(keytar(), -80, (13, 37)))
+    elif kind == 'snare':
+        held.append(snare_front((3, 38)))
+    la, ra = PLAY[kind][k]
+    if kind == 'snare':   # 舉高的鼓棒朝上、敲下去的碰鼓面
+        extra = [stick((6, 29), (9, 20)), stick((22, 37), (17, 39))] if k == 0 else \
+                [stick((8, 37), (13, 39)), stick((24, 29), (21, 20))]
+    if kind == 'mic':
+        extra = [mic(18, 26)]
+    return stack(legs_front(name), skirt(name, 'front'), torso(name, 'front'), head(name),
+                 *held, arm(name, la), arm(name, ra), *extra)
 
 
 def render_all(name):
-    out = {k: f(name) for k, f in FRAMES.items()}
-    for k in ['walk1', 'walk2', 'walk3', 'jump']:
-        out[f'left_{k}'] = out[f'right_{k}'].transpose(Image.FLIP_LEFT_RIGHT)
+    out = {f'right_{p}': side_frame(name, p) for p in ['walk1', 'walk2', 'walk3', 'jump']}
+    out['front_play1'] = front_frame(name, 0)
+    out['front_play2'] = front_frame(name, 1)
+    for p in ['walk1', 'walk2', 'walk3', 'jump']:
+        out[f'left_{p}'] = out[f'right_{p}'].transpose(Image.FLIP_LEFT_RIGHT)
     return out
+
+
+def preview(rows, scale=4, bg=(200, 220, 240, 255)):
+    sheet = Image.new('RGBA', (CW * len(rows[0]), CH * len(rows)), bg)
+    for r, row in enumerate(rows):
+        for k, f in enumerate(row):
+            sheet.alpha_composite(f, (k * CW, r * CH))
+    return sheet.resize((sheet.width * scale, sheet.height * scale), Image.NEAREST)
 
 
 def main(outdir):
@@ -910,11 +468,11 @@ def main(outdir):
         for k, im in frames.items():
             im.save(d / f'{k}.png')
         rows.append([frames[k] for k in ['right_walk1', 'right_walk2', 'right_walk3', 'right_jump',
-                                         'left_walk1', 'front_play1', 'front_play2']])
+                                         'left_walk3', 'front_play1', 'front_play2']])
     (root / 'anchors.json').write_text(json.dumps({
         'size': [CW, CH], 'right': list(FOOT), 'front': list(FOOT), 'left': [CW - 1 - FOOT[0], FOOT[1]],
-        'note': '腳底中心（畫格像素座標）；場景與遊戲放大 2 倍使用'}, ensure_ascii=False, indent=1))
-    preview(rows, 5).save(root / '_preview.png')
+        'note': '腳底中心（畫格像素座標）'}, ensure_ascii=False, indent=1))
+    preview(rows, 3).save(root / '_preview.png')
 
 
 if __name__ == '__main__':

@@ -468,16 +468,15 @@ def render(idx, chars_dir):
         bricks(d, *brk)
 
     # 角色（腳踩地面，朝右）
-    # 手繪角色（sprites.py）與場景同一個像素格，放大 2 倍；腳底中心對齊 cx + 12
+    # 角色（sprites.py，頭取自樂團海報）直接 1:1 貼在 2 倍場景層；腳底中心對齊 cx + 12
     sp = Image.open(Path(chars_dir) / char / 'right_walk3.png')
-    sp = sp.resize((sp.width * 2, sp.height * 2), Image.NEAREST)
     fx, fy0 = sprites.FOOT
     mid = cx + 12
     fy = GY * 2 + (0 if fn is not stage_xiaoyoukeng else -2)
     shadow = Image.new('RGBA', big.size, (0, 0, 0, 0))
     ImageDraw.Draw(shadow).ellipse([mid - 11, fy - 3, mid + 11, fy + 2], fill=(20, 24, 50, 90))
     big.alpha_composite(shadow)
-    big.alpha_composite(sp, (mid - fx * 2, fy - fy0 * 2))
+    big.alpha_composite(sp, (mid - fx, fy - fy0))
 
     final = big.resize((W * 2 * SCALE, H * 2 * SCALE), Image.NEAREST)
     hud(final, player, stage, title, coins=idx * 7 + 3, time=300 - idx * 17)
