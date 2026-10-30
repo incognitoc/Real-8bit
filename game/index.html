@@ -158,12 +158,12 @@ const BG_W = 1920, BG_TOP = 60;          // 遠景 5 倍寬、上方多 60 px �
 let BG_RX = (BG_W - VW) / (LEVEL - VW);
 const BG_RY = .5, CAM_UP = 70;           // 視差比例、鏡頭最多往上 70 px
 const STAGES = [
-  { id: '1-1', title: '台北 101',         char: 'susan',    name: 'SUSAN',    inst: 'mic',    gy: 192 },
-  { id: '1-2', title: '仙跡岩登山入口',   char: 'freda',    name: 'FREDA',    inst: 'mic',    gy: 192 },
-  { id: '1-3', title: '圓山飯店',         char: 'jimmy',    name: 'JIMMY',    inst: 'keytar', gy: 192 },
-  { id: '1-4', title: '臺北表演藝術中心', char: 'davidd',   name: 'DAVIDD',   inst: 'bass',   gy: 192 },
-  { id: '1-5', title: '臺北流行音樂中心', char: 'raphael',  name: 'RAPHAEL',  inst: 'guitar', gy: 192 },
-  { id: '1-6', title: '赤峰街．中山線形公園', char: 'anderson', name: 'ANDERSON', inst: 'snare',  gy: 192 },
+  { id: '1-1', title: '台北 101',         char: 'susan',    name: 'SUSAN',    inst: 'mic',    gy: 192, bgm: 1 },
+  { id: '1-2', title: '仙跡岩登山入口',   char: 'freda',    name: 'FREDA',    inst: 'mic',    gy: 192, bgm: 2 },
+  { id: '1-3', title: '圓山飯店',         char: 'jimmy',    name: 'JIMMY',    inst: 'keytar', gy: 192, bgm: 1 },
+  { id: '1-4', title: '臺北表演藝術中心', char: 'davidd',   name: 'DAVIDD',   inst: 'bass',   gy: 192, bgm: 2 },
+  { id: '1-5', title: '臺北流行音樂中心', char: 'raphael',  name: 'RAPHAEL',  inst: 'guitar', gy: 192, bgm: 1 },
+  { id: '1-6', title: '赤峰街．中山線形公園', char: 'anderson', name: 'ANDERSON', inst: 'snare',  gy: 192, bgm: 3 },
 ];
 const FRAMES = ['right_walk1', 'right_walk2', 'right_walk3', 'right_jump',
                 'left_walk1', 'left_walk2', 'left_walk3', 'left_jump', 'front_play1', 'front_play2'];
@@ -213,73 +213,17 @@ function fit() {
 addEventListener('resize', () => fit());
 addEventListener('orientationchange', () => setTimeout(fit, 200));
 
-// ------------------------------------------------------------ 聲音（WebAudio 晶片音）
+// ------------------------------------------------------------ 聲音：關卡背景音樂（mp3）＋ WebAudio 晶片音效
 const Audio = (() => {
   let ac = null, master = null, on = true;
-  const BPM = 120, STEP = 60 / BPM / 4;                  // 16 分音符
-  let nextT = 0, step = 0, riff = null, timer = null;
+  let bgm = null, cur = null;                               // 背景音樂用 <audio>，循環播放
   const note = n => 440 * Math.pow(2, (n - 69) / 12);
-  // 和弦進行 C - Am - F - G，每小節 16 步
-  const ROOT = [48, 45, 41, 43];
-  const CHORD = [[60, 64, 67], [57, 60, 64], [53, 57, 60], [55, 59, 62]];
-  const MELODY = [72, -1, 74, 76, -1, 76, 74, 72, 69, -1, 72, 74, -1, 72, 69, 67,
-                  65, -1, 69, 72, -1, 74, 72, 69, 67, -1, 71, 74, -1, 79, 77, 74];
   function tone(t, freq, dur, type = 'square', vol = .08, slide = 0) {
     const o = ac.createOscillator(), g = ac.createGain();
     o.type = type; o.frequency.setValueAtTime(freq, t);
     if (slide) o.frequency.exponentialRampToValueAtTime(freq * slide, t + dur);
     g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(.0001, t + dur);
     o.connect(g).connect(master); o.start(t); o.stop(t + dur + .02);
-  }
-  function noise(t, dur, vol = .12, hp = 1200) {
-    const len = Math.floor(ac.sampleRate * dur), buf = ac.createBuffer(1, len, ac.sampleRate);
-    const d = buf.getChannelData(0); for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
-    const s = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain();
-    s.buffer = buf; f.type = 'highpass'; f.frequency.value = hp;
-    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(.0001, t + dur);
-    s.connect(f).connect(g).connect(master); s.start(t);
-  }
-  function bgm(t, k) {                                      // 輕量伴奏：大鼓、腳踏鈸、根音
-    const bar = Math.floor(k / 16) % 4, s = k % 16;
-    if (s % 4 === 0) tone(t, 90, .12, 'sine', .14, .4);
-    if (s % 2 === 1) noise(t, .03, .03, 6000);
-    if (s % 8 === 0) tone(t, note(ROOT[bar]), .2, 'triangle', .07);
-  }
-  const RIFFS = {
-    mic(t, k) {                                             // 主唱：方波主旋律加顫音
-      const n = MELODY[k % 32]; if (n < 0) return;
-      const o = ac.createOscillator(), g = ac.createGain(), lfo = ac.createOscillator(), lg = ac.createGain();
-      o.type = 'square'; o.frequency.value = note(n); lfo.frequency.value = 6; lg.gain.value = 5;
-      lfo.connect(lg).connect(o.frequency);
-      g.gain.setValueAtTime(.06, t); g.gain.setValueAtTime(.06, t + STEP * 1.4); g.gain.exponentialRampToValueAtTime(.0001, t + STEP * 1.9);
-      o.connect(g).connect(master); o.start(t); lfo.start(t); o.stop(t + STEP * 2); lfo.stop(t + STEP * 2);
-    },
-    guitar(t, k) {                                          // 木吉他：三角波刷和弦
-      const ch = CHORD[Math.floor(k / 16) % 4], s = k % 16;
-      if ([0, 3, 6, 8, 10, 12, 14].includes(s)) ch.forEach((n, i) => tone(t + i * .012, note(n), .35, 'triangle', .05));
-    },
-    bass(t, k) {                                            // 電 bass：八分音符低音線
-      const r = ROOT[Math.floor(k / 16) % 4], s = k % 16;
-      const pat = [0, -1, 12, -1, 0, -1, 7, -1, 0, -1, 12, -1, 10, -1, 7, -1];
-      if (pat[s] >= 0) tone(t, note(r - 12 + pat[s] + 12), .16, 'square', .07);
-    },
-    keytar(t, k) {                                          // keytar：鋸齒波十六分琶音
-      const ch = CHORD[Math.floor(k / 16) % 4];
-      tone(t, note(ch[k % 3] + 12), .1, 'sawtooth', .035);
-    },
-    snare(t, k) {                                           // 行進小鼓：二四拍加滾奏
-      const s = k % 16;
-      if (s === 4 || s === 12) noise(t, .16, .16, 900);
-      else if (s >= 13) noise(t, .05, .07, 1500);
-      else if (s % 2 === 0) noise(t, .03, .04, 2000);
-    },
-  };
-  function tick() {
-    while (nextT < ac.currentTime + .12) {
-      bgm(nextT, step);
-      if (riff) RIFFS[riff](nextT, step);
-      nextT += STEP; step++;
-    }
   }
   return {
     start() {
@@ -288,10 +232,15 @@ const Audio = (() => {
         master = ac.createGain(); master.gain.value = on ? .9 : 0; master.connect(ac.destination);
       }
       ac.resume();
-      if (!timer) { nextT = ac.currentTime + .05; timer = setInterval(tick, 25); }
     },
-    riff(kind) { riff = kind; },
-    toggle() { on = !on; if (master) master.gain.value = on ? .9 : 0; return on; },
+    music(n) {                                              // n = 1~3 播 assets/music/bgm<n>.mp3，null 停止
+      if (n == null) { if (bgm) bgm.pause(); return; }
+      if (!bgm) { bgm = document.createElement('audio'); bgm.loop = true; bgm.preload = 'auto'; bgm.volume = .6; }
+      if (cur !== n) { bgm.src = `assets/music/bgm${n}.mp3`; cur = n; }
+      bgm.currentTime = 0; bgm.muted = !on;
+      bgm.play().catch(() => {});                           // 還沒有使用者互動時瀏覽器會擋，忽略
+    },
+    toggle() { on = !on; if (master) master.gain.value = on ? .9 : 0; if (bgm) bgm.muted = !on; return on; },
     arp(n) {                                                // 頂磚塊：從第 n 級音開始的 do-mi-sol（三度疊三度），每次往上一級
       if (!ac || !on) return;
       const SCALE = [0, 2, 4, 5, 7, 9, 11], t = ac.currentTime;
@@ -369,7 +318,7 @@ function startStage(si) {
         hearts: 3, coins: 0, time: 300, still: 0, playing: false, inv: 0, dist: 0, clear: 0, scale: 0, pit: null };
   parts.length = 0; camX = 0; camY = 0; mode = 'play';
   $('title').hidden = true; $('clear').hidden = true; $('hud').hidden = false; $('mute').hidden = false;
-  fit();
+  fit(); Audio.music(st.bgm);
   $('pname').textContent = st.name; $('sid').textContent = 'STAGE ' + st.id; $('stitle').textContent = st.title;
   hud();
 }
@@ -399,7 +348,7 @@ function fall() {                                      // 掉進洞：扣一顆�
 }
 
 function gameOver(msg) {
-  mode = 'over'; Audio.riff(null);
+  mode = 'over'; Audio.music(null);
   $('clearText').textContent = 'GAME OVER';
   $('clearInfo').textContent = msg;
   $('nextBtn').textContent = '再試一次';
@@ -408,7 +357,7 @@ function gameOver(msg) {
 }
 
 function stageClear() {
-  mode = 'clear'; Audio.sfx('clear');
+  mode = 'clear'; Audio.music(null); Audio.sfx('clear');
   const bonus = Math.floor(S.time / 10);
   const last = S.si === STAGES.length - 1;
   $('clearText').textContent = last ? '巡演完成！' : 'STAGE CLEAR!';
@@ -419,7 +368,7 @@ function stageClear() {
 }
 
 function showTitle() {
-  mode = 'title'; S = null; Audio.riff(null); fit();
+  mode = 'title'; S = null; Audio.music(null); fit();
   $('title').hidden = false; $('clear').hidden = true; $('hud').hidden = true;
 }
 
@@ -478,7 +427,7 @@ function update() {
   const idle = S.ground && Math.abs(S.vx) < .05 && !keys.l && !keys.r && !keys.j;
   S.still = idle ? S.still + 1 : 0;
   const playing = S.still > 28 || (mode === 'clear' && Math.abs(S.vx) < .05);
-  if (playing !== S.playing) { S.playing = playing; Audio.riff(playing ? st.inst : null); }
+  S.playing = playing;
   if (S.playing && frame % 22 === 0)
     parts.push({ kind: 'note', x: S.x + (Math.random() * 24 - 12), y: S.y - 70, vy: -.6, life: 60, float: true });
 

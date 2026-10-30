@@ -4,6 +4,7 @@
 - ground_<n>.png：各關地面長條（與遠景同一套 ground() 畫法，加長到整關長度），跟著鏡頭捲動
 - brick / block / block_used / coin / note / bignote（路上的大音符）/ enemy_* / goal：關卡物件，皆為 384 場景層的原生像素
 - chars/<名字>/*.png：sprites.py 產生的角色畫格
+- music/bgm<n>.mp3：關卡背景音樂，從 repo 的 music/ 複製（1、3、5 關 bgm1，2、4 關 bgm2，6 關 bgm3）
 用法：python build_game.py
 """
 import shutil
@@ -178,6 +179,7 @@ def main():
         enemy(f).save(ASSETS / f'enemy_{f}.png')
     goal().save(ASSETS / 'goal.png')
     shutil.copytree(HERE / 'characters', ASSETS / 'chars', ignore=shutil.ignore_patterns('_preview.png', '*.json'))
+    shutil.copytree(HERE / 'music', ASSETS / 'music')
     print('assets →', ASSETS, len(list(ASSETS.rglob('*.png'))), 'png')
 
 
