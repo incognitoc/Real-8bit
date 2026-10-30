@@ -15,7 +15,15 @@
 
 ## 網頁遊戲
 
-線上試玩（GitHub Pages）：https://incognitoc.github.io/Real-8bit/
+線上試玩（GitHub Pages，持續更新）：https://incognitoc.github.io/Real-8bit/
+
+固定版本（不會再變動）：
+
+| 版本 | 網址 | 內容 |
+| --- | --- | --- |
+| v1.0（2026-10-30） | https://incognitoc.github.io/Real-8bit/v1/ | 六關、主視覺首頁、地洞、大音符、樂團歌曲背景音樂、直式手機介面 |
+
+`v1/` 是 `game/` 在 v1.0 當下的複本，之後只改 `game/`，不要動 `v1/`。
 
 `game/` 是可以玩的橫向捲軸遊戲（六關、每關一位團員）：← → 移動、空白鍵／↑ 跳躍，
 停下來就會轉正面演奏自己的樂器（WebAudio 晶片音），踩走音怪、頂音箱拿金幣，碰到終點旗桿過關。手機有觸控鍵。

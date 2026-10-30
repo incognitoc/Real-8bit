@@ -4,6 +4,7 @@
 
 - GitHub：https://github.com/incognitoc/Real-8bit（`main`）
 - **公開試玩（GitHub Pages，給團員）：https://incognitoc.github.io/Real-8bit/**（由 `main` 根目錄部署，推上去約 1 分鐘後更新；開關 Pages 需 incognitoc 帳號）
+- **固定版本 v1.0：https://incognitoc.github.io/Real-8bit/v1/**（`v1/` 資料夾是 `game/` 的快照，git tag `v1.0`；之後改版只動 `game/`）
 - Claude artifact 版（私人）：https://claude.ai/artifact/RdjNiTYXVefMQ5N72ZG4U7
 
 ## 目前狀態
